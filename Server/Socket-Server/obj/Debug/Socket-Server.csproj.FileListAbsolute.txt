@@ -1,0 +1,12 @@
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Socket\Sample-Socket\Socket-Server\Socket-Server\bin\Debug\Socket-Server.exe.config
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Socket\Sample-Socket\Socket-Server\Socket-Server\bin\Debug\Socket-Server.exe
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Socket\Sample-Socket\Socket-Server\Socket-Server\bin\Debug\Socket-Server.pdb
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Socket\Sample-Socket\Socket-Server\Socket-Server\obj\Debug\Socket-Server.csprojResolveAssemblyReference.cache
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Socket\Sample-Socket\Socket-Server\Socket-Server\obj\Debug\Socket_Server.Form1.resources
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Socket\Sample-Socket\Socket-Server\Socket-Server\obj\Debug\Socket_Server.Properties.Resources.resources
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Socket\Sample-Socket\Socket-Server\Socket-Server\obj\Debug\Socket-Server.csproj.GenerateResource.Cache
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Socket\Sample-Socket\Socket-Server\Socket-Server\obj\Debug\Socket-Server.exe
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Socket\Sample-Socket\Socket-Server\Socket-Server\obj\Debug\Socket-Server.pdb
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Server\Socket-Server\bin\Debug\Socket-Server.exe.config
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Server\Socket-Server\obj\Debug\Socket-Server.exe
+C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\Server\Socket-Server\obj\Debug\Socket-Server.pdb
