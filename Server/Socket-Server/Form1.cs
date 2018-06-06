@@ -11,12 +11,13 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Globalization;
+using TaiSEIA;
 
 namespace Socket_Server
 {
     public partial class Form1 : Form
     {
-        TcpListener server; // Creates a TCP Listener To Listen to Any IPAddress trying to connect to the program with port 1980
+        TcpListener server; // Creates a TCP Listener To Listen to Any IPAddress trying to connect to the program with port 1980        
 
         int clientNum = 0;
         List<TcpClient> clients;// Creates a TCP Client list
@@ -133,14 +134,13 @@ namespace Socket_Server
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            //onlineStatusBox.Items.Add("123", false);
-            //onlineStatusBox.SetItemChecked(0, true);
+            
         }
 
         private void btnListen_Click(object sender, EventArgs e)
-        {
+        {            
             server = new TcpListener(IPAddress.Any, Convert.ToInt32(portBox.Text));
-            server.Start(); // Starts Listening to Any IPAddress trying to connect to the program with port 1980
+            server.Start(); // Starts Listening to Any IPAddress trying to connect to the program with port 8080
             MessageBox.Show("Waiting For Connection");
             Thread t = new Thread(() => // Creates a New Thread (like a timer)
             {
@@ -148,7 +148,7 @@ namespace Socket_Server
                 {
                     clients.Add(server.AcceptTcpClient());  //Waits for the Client To Connect                 
 
-                    MessageBox.Show("Connected To Client");
+                    //MessageBox.Show("Connected To Client");
                     if (clients[clients.Count - 1].Connected) // If you are connected
                     {
                         clientNum++;
