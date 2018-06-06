@@ -22,54 +22,17 @@ namespace Socket_Server
         int clientNum = 0;
         List<TcpClient> clients;// Creates a TCP Client list
 
+        TaiSEIA_Server server_test;
+
         public Form1()
         {
             InitializeComponent();
             clients = new List<TcpClient>();
+
+            
         }
         
-        public void ServerReceive(ref List<TcpClient> tmp)
-        {
-            int i;
-            NetworkStream stream; //Creats a NetworkStream (used for sending and receiving data) 
-            int no = tmp.Count - 1;
-            stream = tmp[no].GetStream(); //Gets The Stream of The Connection
-            Thread t = new Thread(() => // Thread (like Timer)
-            {
-                try
-                {
-                    byte[] datalength = new byte[3]; // creates a new byte with length 4 ( used for receivng data's length)
-                    while ((i = stream.Read(datalength, 0, 3)) != 0)//Keeps Trying to Receive the Size of the Message or Data
-                    {
-                        // how to make a byte E.X byte[] examlpe = new byte[the size of the byte here] , i used BitConverter.ToInt32(datalength,0) cuz i received the length of the data in byte called datalength :D
-                        //byte[] data = new byte[BitConverter.ToInt32(datalength, 0)]; // Creates a Byte for the data to be Received On
-                        byte[] data = new byte[Convert.ToInt32(datalength[2])];
-                        for (int j = 0; j < 3; j++)
-                            data[j] = datalength[j];
-                        stream.Read(data, 3, data.Length-3); //Receives The Real Data not the Size
-                        string message = "";
-                        foreach (byte data_byte in data)
-                        {
-                            message = message + Convert.ToInt32(data_byte).ToString("X2") + " ";
-                        }
-                        this.Invoke((MethodInvoker)delegate // To Write the Received data
-                        {
-                            DateTime localDate = DateTime.Now;
-                            String timestamp = localDate.ToString(new CultureInfo("en-US")); 
-                            txtLog.AppendText(System.Environment.NewLine + timestamp+" | Client : " + message);
-                            // Encoding.Default.GetString(data); Converts Bytes Received to String
-                        });
-                    }
-                }
-                catch (Exception e)
-                {
-                    MessageBox.Show(e.Message);
-                }
-            });
-            t.IsBackground=true;
-            t.Start(); // Start the Thread
-
-        }
+        
         public void checkStatus()
         {
             this.Invoke((MethodInvoker)delegate
@@ -138,40 +101,33 @@ namespace Socket_Server
         }
 
         private void btnListen_Click(object sender, EventArgs e)
-        {            
-            server = new TcpListener(IPAddress.Any, Convert.ToInt32(portBox.Text));
-            server.Start(); // Starts Listening to Any IPAddress trying to connect to the program with port 8080
-            MessageBox.Show("Waiting For Connection");
-            Thread t = new Thread(() => // Creates a New Thread (like a timer)
-            {
-                while (true)
-                {
-                    clients.Add(server.AcceptTcpClient());  //Waits for the Client To Connect                 
+        {
+            server_test = new TaiSEIA_Server(portBox.Text);
 
-                    //MessageBox.Show("Connected To Client");
-                    if (clients[clients.Count - 1].Connected) // If you are connected
-                    {
-                        clientNum++;
-                        ServerReceive(ref clients); //Start Receiving                                          
-                    }
-                }
-
-            });
-            t.IsBackground = true;
-            t.Start();
-
+            server_test.StartConnect();
             btnListen.Enabled = false;
+            timer1.Enabled = true;
             cmdBox.Enabled = true;
+            
         }
 
         private void btnSend_Click(object sender, EventArgs e)
         {
-            ServerSend(txtSend.Text); // uses the Function ClientSend and the msg as txtSend.Text            
+            //ServerSend(txtSend.Text); // uses the Function ClientSend and the msg as txtSend.Text            
+            server_test.ServerSend(txtSend.Text);
         }
 
         private void timer1_Tick(object sender, EventArgs e)
         {
-            checkStatus();
+            for (int i = 0; i < server_test.clients.Count; i++)
+            {
+                if (server_test.clients[i].isContainMessage())
+                {
+                    DateTime localDate = DateTime.Now;
+                    String timestamp = localDate.ToString(new CultureInfo("en-US"));
+                    txtLog.AppendText(timestamp + " | Client " + i + " : " + server_test.clients[i].getMessage()+Environment.NewLine);
+                }
+            }
         }
     }
 }

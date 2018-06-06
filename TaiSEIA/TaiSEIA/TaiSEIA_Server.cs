@@ -28,7 +28,7 @@ namespace TaiSEIA
             
         }
 
-        public void Start()
+        public void StartConnect()
         {
             server.Start(); // Starts Listening to Any IPAddress trying to connect to the program with port 8080
             Console.WriteLine("Waiting For Connection....");
@@ -76,7 +76,9 @@ namespace TaiSEIA
                         byte[] data = new byte[Convert.ToInt32(datalength[2])];
                         for (int j = 0; j < 3; j++)
                             data[j] = datalength[j];
+                        
                         current_client.cl.GetStream().Read(data, 3, data.Length - 3); //Receives The Real Data not the Size
+                        
                         string message = "";
                         foreach (byte data_byte in data)
                         {
@@ -113,11 +115,20 @@ namespace TaiSEIA
                             NetworkStream stream; //Creats a NetworkStream (used for sending and receiving data) 
                             stream = clients[i].cl.GetStream(); //Gets The Stream of The Connection
                             byte[] data; // creates a new byte without mentioning the size of it cuz its a byte used for sending
-                            data = Encoding.Default.GetBytes(msg); // put the msg in the byte ( it automaticly uses the size of the msg )
-                            int length = data.Length; // Gets the length of the byte data
-                            byte[] datalength = new byte[4]; // Creates a new byte with length of 4
-                            datalength = BitConverter.GetBytes(length); //put the length in a byte to send it
-                            stream.Write(datalength, 0, 4); // sends the data's length
+
+                            string[] hexValues = msg.Split(' ');
+                            data = new byte[hexValues.Length];
+
+                            for (int j = 0; j < hexValues.Length; j++)
+                            {
+                                data[j] = Convert.ToByte(Convert.ToInt32(hexValues[j], 16));
+                            }
+
+                            //data = Encoding.Default.GetBytes(msg); // put the msg in the byte ( it automaticly uses the size of the msg )
+                            //int length = data.Length; // Gets the length of the byte data
+                            //byte[] datalength = new byte[4]; // Creates a new byte with length of 4
+                            //datalength = BitConverter.GetBytes(length); //put the length in a byte to send it
+                            //stream.Write(datalength, 0, 4); // sends the data's length
                             stream.Write(data, 0, data.Length); //Sends the real data
                         }
                         catch (Exception e)
@@ -341,6 +352,13 @@ namespace TaiSEIA
         public void setMessage(string a)
         {
             msg = a;
+        }
+        public bool isContainMessage()
+        {
+            if (msg.Equals("") == true)
+                return false;
+            else
+                return true;
         }
     }
 }
