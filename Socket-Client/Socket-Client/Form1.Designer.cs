@@ -44,6 +44,7 @@
             this.txtSend.Name = "txtSend";
             this.txtSend.Size = new System.Drawing.Size(255, 23);
             this.txtSend.TabIndex = 7;
+            this.txtSend.Text = "13 00 1A FF FF FF FF FF FF FF FF FF FF FF FF FF 00 01 01 00 FF FF 00 00 CA 21";
             // 
             // txtLog
             // 

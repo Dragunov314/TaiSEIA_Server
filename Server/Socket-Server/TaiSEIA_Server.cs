@@ -295,6 +295,9 @@ namespace TaiSEIA
 
             //-----------------------------------
 
+            //--- Set Packet Length ----
+            string2byte((code.Length+2).ToString(), 16).CopyTo(code, 1);
+            //-----------------------------------
 
             //---- Set CRC by appending bytes -----
             ushort crc = Compute_CRC16_Simple(code);
@@ -303,9 +306,7 @@ namespace TaiSEIA
             code = appendToByteArray(code,tmp);
             //-----------------------------------
 
-            //--- Set Packet Length ----
-            string2byte(code.Length.ToString(), 16).CopyTo(code,1);
-            //-----------------------------------
+            
 
             return code;
         }
@@ -466,10 +467,12 @@ namespace TaiSEIA
             return hexValuesByte;
         }
             
-        public int byte2int(byte[] b)
+        public ushort byte2int(byte[] b)
         {
-            Array.Reverse(b);
-            return BitConverter.ToInt16(b, 0);
+            byte[] tmp = new byte[b.Length];
+            b.CopyTo(tmp, 0);
+            Array.Reverse(tmp);
+            return BitConverter.ToUInt16(tmp, 0);
         }
 
         
@@ -489,8 +492,8 @@ namespace TaiSEIA
             str += function_ID[0].ToString("X2") + " ";
             str += function_ID[1].ToString("X2") + " ";
             str += "FF FF ";//Reserved ID
-            str += sender_ID[0].ToString("X2") + " ";
-            str += sender_ID[1].ToString("X2") + " ";
+            str += segment_ID[0].ToString("X2") + " ";
+            str += segment_ID[1].ToString("X2") + " ";
             if (data != null)
             {
                 for (int i = 0; i < data.Length; i++)
@@ -505,7 +508,7 @@ namespace TaiSEIA
         public bool checkCRC(byte[] d, byte[] receive_crc)
         {
             ushort ans = Compute_CRC16_Simple(d);
-            int rc = byte2int(receive_crc);
+            ushort rc = byte2int(receive_crc);
 
             if (ans == rc)
                 return true;

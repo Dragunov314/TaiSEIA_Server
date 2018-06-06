@@ -15,8 +15,6 @@ C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\TaiSEIA_Server\Server\Sock
 C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\TaiSEIA_Server\Server\Socket-Server\obj\Debug\Socket-Server.pdb
 C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\TaiSEIA_Server\Server\Socket-Server\bin\Debug\Socket-Server.exe
 C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\TaiSEIA_Server\Server\Socket-Server\bin\Debug\Socket-Server.pdb
-C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\TaiSEIA_Server\Server\Socket-Server\bin\Debug\TaiSEIA.dll
-C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\TaiSEIA_Server\Server\Socket-Server\bin\Debug\TaiSEIA.pdb
 C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\TaiSEIA_Server\Server\Socket-Server\obj\Debug\Socket-Server.csprojResolveAssemblyReference.cache
 C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\TaiSEIA_Server\Server\Socket-Server\obj\Debug\Socket_Server.Form1.resources
 C:\Users\455761\Desktop\Dragunov\ItelligenceAppliance\TaiSEIA_Server\Server\Socket-Server\obj\Debug\Socket_Server.Properties.Resources.resources
