@@ -63,26 +63,21 @@ namespace TaiSEIA
         }
         private void setupIDProcess(int index)
         {
-            while (clients[index].isContainMessage() == false) { };
+            while (clients[index].isContainMessage() == false) { }; //Wait for client to broadcast
 
             string msg = clients[index].getMessage();
             TaiSEIA_Packet_structure receive_code = new TaiSEIA_Packet_structure(msg);
             if (receive_code.function_ID[0] == 0x01 && receive_code.function_ID[1] == 0x00) //GET broadcast
             {
-                string[] data = new string[6];
-                data[0] = "4294967295";
-                data[1] = "65535";
-                data[2] = "4294967295";
-                data[3] = "65535";
-                data[4] = "255"; 
-                data[5] = "1";
-
-                byte[] db = generateTaiSEIACode(0xF0FF,data);//Generate ACK
-                TaiSEIA_Packet_structure tmp = new TaiSEIA_Packet_structure(db);
-
-                Console.WriteLine(tmp.ToString());
+                TaiSEIA_Packet_structure tmp = new TaiSEIA_Packet_structure(0xFFFFFFFF, 0xFFFF,  //Sender ID
+                                                                            0xFFFFFFFF, 0xFFFF,  //Receiver ID
+                                                                            0xFF,    //Group ID
+                                                                            0x01,    //Event ID
+                                                                            0xF0FF); //Function ID
                 ServerSend(tmp.ToString(), index);
             }
+
+
 
         }
 
@@ -223,200 +218,207 @@ namespace TaiSEIA
 
         //Generate byte array msg from function code, 
         //2 byte hexCode = function ID + Sub-function ID, ex: 0x00 + 0xF0 --> hexCode = 0x00F0
-        private byte[] generateTaiSEIACode(ushort hexCode, string[] data=null, bool hasData = false)
-        {
-            byte[] code = new byte[24];
+        
 
-            byte[] tmp;
-
-            //Message Structure (26 + N bytes)
-            //Header ID     : 1 byte  , constant value = 0x13
-            //Packet Length : 2 bytes ,
-            //Sender ID     : 6 bytes , (4bytes USER ID : data[0] + 2bytes HG/HNA ID : data[1])
-            //Receiver ID   : 6 bytes , (4bytes USER ID : data[2] + 2bytes HG/HNA ID : data[3])
-            //Group ID      : 1 byte  , set to 0xFF currently, data[4]
-            //Event ID      : 2 bytes , data[5]
-            //Function Code : 2 bytes , Function ID + Sub-function ID from hexCode
-            //Reserved bytes: 2 bytes , constant 0xFFFF
-            //Segment ID    : 2 bytes , data order of splitted data, assumed no splitting for now
-            //data[6~END]     : N bytes , data content N>=0, exists if hasData = true
-            //CRC           : 2 bytes , CRC-16-CCITT with initial value 0xFFFF
-
-            //---- Set Header ID constant = 0x13 -----
-            byte current_byte = 0x13;
-            code[0] = current_byte;
-            //--------------------------------
-
-            //----- Sender ID, code[3~8] ----
-            //4bytes USER ID   
-            string2byte(data[0],32).CopyTo(code, 3);
-            //2bytes HG/HNA ID
-            string2byte(data[1],16).CopyTo(code, 7);
-            //--------------------------------
-
-            //---- Receiver ID, code[9~14] -----
-            //4bytes USER ID   
-            string2byte(data[2], 32).CopyTo(code, 9);
-            //2bytes HG/HNA ID
-            string2byte(data[3], 16).CopyTo(code, 13);
-            //--------------------------------
-
-            //---- Set Group ID, code[15] ----
-            code[15] = 0xFF;
-
-            //----------------------------------
-
-
-            //---- Set Event ID, code[16~17] ----           
-            string2byte(data[5], 16).CopyTo(code, 16);
-            //----------------------------------
-
-            //---- Set Function ID from hexcode, code[18~19] ----
-            tmp = BitConverter.GetBytes(Convert.ToUInt16(hexCode));
-            code[18] = tmp[1]; //Function ID
-            code[19] = tmp[0]; //Sub-Function ID
-            //----------------------------------
-
-
-            //---- Set Reserved Bytes, code[20~21] = 0xFFFF-----
-            code[20] = 0xFF;
-            code[21] = 0xFF;
-            //----------------------------------
-
-            //---- Set Segment ID, code[22~23] = 0x0000-----
-            code[22] = 0x00;
-            code[23] = 0x00;
-            //----------------------------------
-
-
-            //---- Set Data by appending bytes, code[N] ----
-
-            //Write Code here
-
-            //-----------------------------------
-
-            //--- Set Packet Length ----
-            string2byte((code.Length+2).ToString(), 16).CopyTo(code, 1);
-            //-----------------------------------
-
-            //---- Set CRC by appending bytes -----
-            ushort crc = Compute_CRC16_Simple(code);
-            tmp = BitConverter.GetBytes(Convert.ToUInt16(crc));
-            Array.Reverse(tmp);
-            code = appendToByteArray(code,tmp);
-            //-----------------------------------
-
-            
-
-            return code;
-        }
-
-        byte[] string2byte(string t, int type)
-        {
-            byte[] result;
-            if (type == 16)//2 bytes
-            {
-                result = new byte[2];
-                UInt16 buf16;
-                buf16 = Convert.ToUInt16(t);
-                result = BitConverter.GetBytes(buf16);
-                Array.Reverse(result);
-            }
-            else if (type == 32)// 4 bytes
-            {
-                result = new byte[4];
-                UInt32 buf32;
-                buf32 = Convert.ToUInt32(t);
-                result = BitConverter.GetBytes(buf32);
-                Array.Reverse(result);
-            }
-            else
-            {
-                result = new byte[2];//Dummy line, just preventing debug errors
-            }
-
-            return result;
-        }
-        public ushort Compute_CRC16_Simple(byte[] bytes)
-        {
-            /*
-            Reference : http://www.sunshine2k.de/articles/coding/crc/understanding_crc.html
-            Algorithm : CRC-16-CCIT-FALSE
-            Polynomial : 0x1021
-            Initial Value : 0xFFFF
-            Final XOR Value : 0x0 (Actually 0 has no impact)            
-            */
-            const ushort generator = 0x1021;    /* divisor is 16bit */
-            ushort crc = 0xFFFF; /* CRC value is 16bit (Initial Value)*/
-
-            foreach (byte b in bytes)
-            {
-                crc ^= (ushort)(b << 8); /* move byte into MSB of 16bit CRC */
-
-                for (int i = 0; i < 8; i++)
-                {
-                    if ((crc & 0x8000) != 0) /* test for MSB = bit 15 */
-                    {
-                        crc = (ushort)((crc << 1) ^ generator);
-                    }
-                    else
-                    {
-                        crc <<= 1;
-                    }
-                }
-            }
-
-            return crc;
-        }
-
-        private byte[] appendToByteArray(byte[] bArray, byte[] newByte)
-        {
-            byte[] newArray = new byte[bArray.Length + newByte.Length];
-            bArray.CopyTo(newArray, 0);
-            newByte.CopyTo(newArray, bArray.Length);
-            return newArray;
-        }
+        
 
         //-----------------------------
     }
     public class TaiSEIA_Packet_structure
     {
-        //Message Structure (26 + N bytes)
-        //Header ID     : 1 byte  , constant value = 0x13
-        //Packet Length : 2 bytes ,
-        //Sender ID     : 6 bytes , (4bytes USER ID  + 2bytes HG/HNA ID )
-        //Receiver ID   : 6 bytes , (4bytes USER ID  + 2bytes HG/HNA ID )
-        //Group ID      : 1 byte  , set to 0xFF currently
-        //Event ID      : 2 bytes 
-        //Function Code : 2 bytes , Function ID + Sub-function ID from hexCode
-        //Reserved bytes: 2 bytes , constant 0xFFFF
-        //Segment ID    : 2 bytes , data order of splitted data, assumed no splitting for now
-        //DATA          : N bytes , data content N>=0, exists if hasData = true
-        //CRC           : 2 bytes , CRC-16-CCITT with initial value 0xFFFF
-        public byte header_ID;
+        /// <summary>
+        /// Message Structure (26 + N bytes)
+        /// Header ID     : 1 byte  , constant value = 0x13
+        /// Packet Length : 2 bytes ,
+        /// Sender ID     : 6 bytes , (4bytes USER ID  + 2bytes HG/HNA ID )
+        /// Receiver ID   : 6 bytes , (4bytes USER ID  + 2bytes HG/HNA ID )
+        /// Group ID      : 1 byte  , set to 0xFF currently
+        /// Event ID      : 2 bytes 
+        /// Function Code : 2 bytes , Function ID + Sub-function ID from hexCode
+        /// Reserved bytes: 2 bytes , constant 0xFFFF
+        /// Segment ID    : 2 bytes , data order of splitted data, assumed no splitting for now
+        /// DATA          : N bytes , data content N>=0, exists if hasData = true
+        /// CRC           : 2 bytes , CRC-16-CCITT with initial value 0xFFFF
+        /// </summary>
+
+        
+        public byte[] header_ID = new byte[1];
         public byte[] packet_length = new byte[2];
         public byte[] sender_ID = new byte[6];
         public byte[] receiver_ID = new byte[6];
-        public byte group_ID;
+        public byte[] group_ID =new byte[1];
         public byte[] event_ID = new byte[2];
         public byte[] function_ID = new byte[2];
+        public byte[] reserved_bytes = new byte[]{ 0xFF, 0xFF }; 
         public byte[] segment_ID = new byte[2];
         public byte[] data = null;
         public byte[] crc = new byte[2];
 
+        private List<byte[]> all_members;
+        //Look up table for all_members list
+        private Dictionary<string, int> mb_table = new Dictionary<string, int>() {
+            {"header_ID",0}, {"packet_length", 1},{"sender_ID",2},{"receiver_ID",3},{"group_ID",4},
+            { "event_ID",5},{"function_ID",6},{"reserved_bytes",7},{"segment_ID",8}
+        };
+
+        /// <summary>
+        /// Construct an instance of TaiSEIA structure. Input parameters snd_usr_id,rcv_usr_id should be Int64 data type.
+        /// </summary>
+        /// <param name="snd_usr_id"></param>
+        /// <param name="snd_hg_id"></param>
+        /// <param name="rcv_usr_id"></param>
+        /// <param name="rcv_hg_id"></param>
+        /// <param name="grp_id"></param>
+        /// <param name="evt_id"></param>
+        /// <param name="fcn_id"></param>
+        /// <param name="data"></param>
+        /// <param name="hasData"></param>
+        public TaiSEIA_Packet_structure(Int64 snd_usr_id, int snd_hg_id, Int64 rcv_usr_id, int rcv_hg_id, int grp_id, int evt_id, int fcn_id, string data_str = "", bool hasData = false)
+        {   
+            //Check input
+            if (snd_usr_id > 0xFFFFFFFF || snd_usr_id < 0x0000000000)
+                throw new System.ArgumentException("Parameter is out of range", "snd_usr_id");
+            if (snd_hg_id > 0xFFFF || snd_hg_id<0x0000)
+                throw new System.ArgumentException("Parameter is out of range", "snd_hg_id");
+            if (rcv_usr_id > 0xFFFFFFFF || rcv_usr_id < 0x00000000)
+                throw new System.ArgumentException("Parameter is out of range", "rcv_usr_id");
+            if (rcv_hg_id > 0xFFFF || rcv_hg_id < 0x0000)
+                throw new System.ArgumentException("Parameter is out of range", "rcv_hg_id");
+            if (grp_id>0xFF || grp_id<0x00)
+                throw new System.ArgumentException("Parameter is out of range", "grp_id");
+            if (evt_id > 0xFFFF || evt_id < 0x0000)
+                throw new System.ArgumentException("Parameter is out of range", "evt_id");
+            if (fcn_id>0xFFFF || fcn_id < 0x0000)
+                throw new System.ArgumentException("Parameter is out of range", "fcn_id");
+            ///
+            header_ID[0] = 0x13;
+
+            packet_length = int2byteArray(0x1A, 16); //length = 26
+
+            byte[] tmp;
+            tmp = int2byteArray(snd_usr_id, 32);
+            Array.Copy(tmp, 0, sender_ID, 0, 4);
+            tmp = int2byteArray(snd_hg_id, 16);
+            Array.Copy(tmp, 0, sender_ID, 4, 2);
+
+            tmp = int2byteArray(rcv_usr_id, 32);
+            Array.Copy( tmp, 0, receiver_ID, 0, 4);
+            tmp = int2byteArray(rcv_hg_id, 16);
+            Array.Copy( tmp, 0, receiver_ID, 4, 2);
+
+            if (BitConverter.IsLittleEndian)
+                group_ID[0] = BitConverter.GetBytes(Convert.ToUInt16(grp_id))[0];
+            else
+                group_ID[0] = BitConverter.GetBytes(Convert.ToUInt16(grp_id))[1];
+
+            event_ID = int2byteArray(evt_id, 16);
+
+            function_ID = int2byteArray(fcn_id, 16);
+
+            //reserved bytes
+
+            segment_ID = int2byteArray(0x0000, 16); //Default to 0
+
+            // Assume no data
+            //
+
+            refreshAllMembers();
+            //CRC-16-CCITT Calculation
+            byte[] raw_code = this.ToByteArray();//delete the crc 2bytes
+            byte[] code = new byte[raw_code.Length-2];
+            Array.Copy(raw_code,0,code,0,raw_code.Length-2);            
+            crc = int2byteArray(Convert.ToInt32(Compute_CRC16_Simple(code)), 16);
+            refreshAllMembers();
+            
+        }
+        public TaiSEIA_Packet_structure(TaiSEIA_Packet_structure source)
+        {
+            if (source.data != null)
+                data = new byte[source.data.Length];
+
+            refreshAllMembers();
+            for (int i = 0; i < this.all_members.Count; i++)
+            {
+                for (int j = 0; j < this.all_members[i].Length; j++)
+                {
+                    this.all_members[i][j] = source.all_members[i][j];
+                }
+            }            
+            
+        }
+
         public TaiSEIA_Packet_structure(byte[] raw_code)
         {
             decode(raw_code);
+            refreshAllMembers();
         }
 
         public TaiSEIA_Packet_structure(string hexstr)
         {
            decode(hexString2byteArray(hexstr));
+           refreshAllMembers();
         }
 
-        public void decode(byte[] raw_code)
+        public override string ToString()
         {
-            header_ID = raw_code[0];
+            refreshAllMembers();
+            string str = "";
+
+            for (int i = 0; i < all_members.Count; i++)
+            {
+                for (int j = 0; j < all_members[i].Length; j++)
+                {
+                    if (i == (all_members.Count - 1) && j == (all_members[i].Length - 1))
+                        str += all_members[i][j].ToString("X2");
+                    else
+                        str += all_members[i][j].ToString("X2") + " ";
+                }
+            }
+            return str;
+        }
+
+        public byte[] ToByteArray()
+        {
+            refreshAllMembers();
+            byte[] result = new byte[1];
+            result[0] = header_ID[0];
+
+            for (int i = 1; i < all_members.Count; i++)
+            {
+                for (int j = 0; j < all_members[i].Length; j++)
+                {
+                    result = appendToByteArray(result, all_members[i][j]);
+                }
+            }
+
+            return result;
+        }
+
+        private void refreshAllMembers()
+        {
+            //add all members to pointer list (it applies pointer not data copy)
+            all_members = new List<byte[]>();
+            all_members.Add(header_ID);
+            all_members.Add(packet_length);
+            all_members.Add(sender_ID);
+            all_members.Add(receiver_ID);
+            all_members.Add(group_ID);
+            all_members.Add(event_ID);
+            all_members.Add(function_ID);
+            all_members.Add(reserved_bytes);
+            all_members.Add(segment_ID);
+            if(data!=null)
+                all_members.Add(data);
+            all_members.Add(crc);
+        }
+        private void decode(byte[] raw_code)
+        {
+            //check input
+            if(raw_code.Length<26)
+                throw new System.ArgumentException("Array length is not enough!!", "raw_code");
+            //
+
+            header_ID[0] = raw_code[0];
 
             Array.Copy(raw_code, 1, packet_length, 0, 2);
 
@@ -424,7 +426,7 @@ namespace TaiSEIA
 
             Array.Copy(raw_code, 9, receiver_ID, 0, 6);
 
-            group_ID = raw_code[15];
+            group_ID[0] = raw_code[15];
 
             Array.Copy(raw_code, 16, event_ID, 0, 2);
 
@@ -447,15 +449,66 @@ namespace TaiSEIA
             Array.Copy(raw_code, 0, tmp, 0, packet_len - 2);
             if (checkCRC(tmp, crc))
             {
-                Console.WriteLine("CRC Correct!!");
+                
             }
             else
             {
-                Console.WriteLine("CRC Incorrect!!");
+                throw new System.ArgumentException("Parameter CRC is not correct!!", "crc");
             }
 
         }
-        public byte[] hexString2byteArray(string str)
+        
+
+        private byte[] int2byteArray(int a, int type)
+        {
+            byte[] tmp;
+            if (type == 16)
+            {
+                tmp = new byte[2];
+                tmp = BitConverter.GetBytes(Convert.ToUInt16(a));
+            }
+            else if (type == 32)
+            {
+                tmp = new byte[4];
+                tmp = BitConverter.GetBytes(Convert.ToUInt32(a));
+            }
+            else
+            {
+                tmp = new byte[2];//Dummy line
+            }
+
+            if (BitConverter.IsLittleEndian)
+                Array.Reverse(tmp);
+
+            return tmp;
+        }
+
+        private byte[] int2byteArray(Int64 a, int type)
+        {
+            byte[] tmp;
+            if (type == 16)
+            {
+                tmp = new byte[2];
+                tmp = BitConverter.GetBytes(Convert.ToUInt16(a));
+            }
+            else if (type == 32)
+            {
+                tmp = new byte[4];
+                tmp = BitConverter.GetBytes(Convert.ToUInt32(a));
+            }
+            else
+            {
+                tmp = new byte[2];//Dummy line
+            }
+
+            if (BitConverter.IsLittleEndian)
+                Array.Reverse(tmp);
+
+            return tmp;
+        }
+
+
+        private byte[] hexString2byteArray(string str)
         {
             string[] hexValues = str.Split(' ');
             byte[] hexValuesByte = new byte[hexValues.Length];
@@ -467,7 +520,7 @@ namespace TaiSEIA
             return hexValuesByte;
         }
             
-        public ushort byte2int(byte[] b)
+        private ushort byte2int(byte[] b)//b must be big-endian format
         {
             byte[] tmp = new byte[b.Length];
             b.CopyTo(tmp, 0);
@@ -476,36 +529,25 @@ namespace TaiSEIA
         }
 
         
-        public override string ToString()
-        {
-            string str = "";
-            str += header_ID.ToString("X2")+" ";
-            str += packet_length[0].ToString("X2")+" ";
-            str += packet_length[1].ToString("X2")+" ";
-            for(int i=0;i<6;i++)
-                str += sender_ID[i].ToString("X2") + " ";
-            for (int i = 0; i < 6; i++)
-                str += receiver_ID[i].ToString("X2") + " ";
-            str += group_ID.ToString("X2")+" ";
-            str += event_ID[0].ToString("X2")+ " ";
-            str += event_ID[1].ToString("X2") + " ";
-            str += function_ID[0].ToString("X2") + " ";
-            str += function_ID[1].ToString("X2") + " ";
-            str += "FF FF ";//Reserved ID
-            str += segment_ID[0].ToString("X2") + " ";
-            str += segment_ID[1].ToString("X2") + " ";
-            if (data != null)
-            {
-                for (int i = 0; i < data.Length; i++)
-                    str += data[i].ToString("X2") + " ";
-            }
-            str += crc[0].ToString("X2") + " ";
-            str += crc[1].ToString("X2");
+        
 
-            return str;
+        private byte[] appendToByteArray(byte[] bArray, byte[] newByte)
+        {
+            byte[] newArray = new byte[bArray.Length + newByte.Length];
+            bArray.CopyTo(newArray, 0);
+            newByte.CopyTo(newArray, bArray.Length);
+            return newArray;
         }
 
-        public bool checkCRC(byte[] d, byte[] receive_crc)
+        private byte[] appendToByteArray(byte[] bArray, byte newByte)
+        {
+            byte[] newArray = new byte[bArray.Length + 1];
+            bArray.CopyTo(newArray, 0);
+            newArray[newArray.Length-1]=newByte;
+            return newArray;
+        }
+
+        private bool checkCRC(byte[] d, byte[] receive_crc)
         {
             ushort ans = Compute_CRC16_Simple(d);
             ushort rc = byte2int(receive_crc);
@@ -516,7 +558,7 @@ namespace TaiSEIA
                 return false;
         }
 
-        public ushort Compute_CRC16_Simple(byte[] bytes)
+        private ushort Compute_CRC16_Simple(byte[] bytes)
         {
             /*
             Reference : http://www.sunshine2k.de/articles/coding/crc/understanding_crc.html
