@@ -16,7 +16,7 @@ namespace TaiSEIA
         //Declaring Global variables
         public string USER_ID;
         public string HG_ID;
-        public List<TcpclientsWithMessage> clients; // Creates a TCP Client list
+        public List<HNAClients> clients; // Creates a TCP Client list
 
         private TcpListener server;
         private TextBox txtLog;
@@ -29,7 +29,7 @@ namespace TaiSEIA
             server = new TcpListener(IPAddress.Any, Convert.ToInt32(port));
 
             // Initial a list of clients instance
-            clients = new List<TcpclientsWithMessage>();
+            clients = new List<HNAClients>();
 
             USER_ID = usr;
             HG_ID = hg;
@@ -45,7 +45,7 @@ namespace TaiSEIA
             {
                 while (true)
                 {
-                    TcpclientsWithMessage tmp = new TcpclientsWithMessage(server.AcceptTcpClient());
+                    HNAClients tmp = new HNAClients(server.AcceptTcpClient());
                     
                     clients.Add(tmp);  //Waits for the Client To Connect                 
 
@@ -53,7 +53,7 @@ namespace TaiSEIA
                     if (clients[clients.Count - 1].cl.Connected) // If you are connected
                     {
                         ServerReceive(ref clients); //Start Receiving     
-                        setupIDProcess(clients.Count - 1);                                     
+                        //setupIDProcess(clients.Count - 1);                                     
                     }
                 }
 
@@ -75,6 +75,9 @@ namespace TaiSEIA
                                                                             0x01,    //Event ID
                                                                             0xF0FF); //Function ID
                 ServerSend(tmp.ToString(), index);
+
+                tmp.setFunctionID(0x0102, new string[3] { Convert.ToInt64("0xA01",16).ToString(), "1", "2" });
+                ServerSend(tmp.ToString(), index);
             }
 
 
@@ -82,12 +85,12 @@ namespace TaiSEIA
         }
 
         //Handling receiveing data;
-        private void ServerReceive(ref List<TcpclientsWithMessage> tmp)
+        private void ServerReceive(ref List<HNAClients> tmp)
         {
             int i;
             NetworkStream stream; //Creats a NetworkStream (used for sending and receiving data) 
             int no = tmp.Count - 1;
-            TcpclientsWithMessage current_client = tmp[no];
+            HNAClients current_client = tmp[no];
             stream = tmp[no].cl.GetStream(); //Gets The Stream of The Connection
             Thread t = new Thread(() => // Thread (like Timer)
             {
@@ -322,12 +325,7 @@ namespace TaiSEIA
             // Assume no data
             //
 
-            refreshAllMembers();
-            //CRC-16-CCITT Calculation
-            byte[] raw_code = this.ToByteArray();//delete the crc 2bytes
-            byte[] code = new byte[raw_code.Length-2];
-            Array.Copy(raw_code,0,code,0,raw_code.Length-2);            
-            crc = int2byteArray(Convert.ToInt32(Compute_CRC16_Simple(code)), 16);
+            //Generate CRC
             refreshAllMembers();
             
         }
@@ -346,10 +344,58 @@ namespace TaiSEIA
             }            
             
         }
+        public TaiSEIA_Packet_structure()
+        {
+            byte[] tmp = new byte[] { 0x13, 0x00, 0x1A, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                      0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x01, 0x01, 0x00, 0xFF, 0xFF,
+                                      0x00, 0x00, 0xCA, 0x21 };
+            //default broadcast code
+
+            decode(tmp);
+            refreshAllMembers();
+        }
 
         public TaiSEIA_Packet_structure(byte[] raw_code)
         {
             decode(raw_code);
+            refreshAllMembers();
+        }
+
+        public void setFunctionID(int fcn_id, string[] cmd_data=null)
+        {
+            if (fcn_id > 0xFFFF || fcn_id < 0x0000)
+                throw new System.ArgumentException("Parameter is out of range", "fcn_id");
+
+            function_ID = int2byteArray(fcn_id, 16);
+
+            if (this.isEqualFunctionID(0x0102))
+            {
+                if (cmd_data == null)
+                    throw new System.ArgumentException("Data is null!!", "cmd_data");
+                else if (cmd_data.Length != 3)
+                    throw new System.ArgumentException("Data Length is not match!!", "cmd_data");
+                else
+                {
+                    if (Convert.ToInt64(cmd_data[0]) > 0xFFFFFFFF || Convert.ToInt64(cmd_data[0]) < 0x00000000)
+                        throw new System.ArgumentException("Parameter is out of range", "cmd_data[0]");
+                    if (Convert.ToInt32(cmd_data[1]) > 0xFFFF || Convert.ToInt32(cmd_data[1]) < 0x0000)
+                        throw new System.ArgumentException("Parameter is out of range", "cmd_data[1]");
+                    if (Convert.ToInt32(cmd_data[2]) > 0xFFFF || Convert.ToInt32(cmd_data[2]) < 0x0000)
+                        throw new System.ArgumentException("Parameter is out of range", "cmd_data[2]");
+
+                    data = new byte[1] { 0 };
+                    data = appendToByteArray(data, int2byteArray(Convert.ToInt64(cmd_data[0]), 32));
+                    data = appendToByteArray(data, 0x01);
+                    data = appendToByteArray(data, int2byteArray(Convert.ToInt32(cmd_data[1]), 16));
+                    data = appendToByteArray(data, 0x02);
+                    data = appendToByteArray(data, int2byteArray(Convert.ToInt32(cmd_data[2]), 16));
+                }
+            }
+            else
+            {
+                data = null;//Clear data
+            }
+
             refreshAllMembers();
         }
 
@@ -394,11 +440,27 @@ namespace TaiSEIA
             return result;
         }
 
+        public bool isEqualFunctionID(int a)
+        {
+            if (a > 0xFFFF || a < 0x0000)
+                throw new System.ArgumentException("Parameter is out of range", "a");
+
+            byte[] tmp = int2byteArray(a, 16);
+            if (tmp[0] == function_ID[0] && tmp[1] == function_ID[1])
+                return true;
+            else
+                return false;
+        }
+
         private void refreshAllMembers()
         {
+
             //add all members to pointer list (it applies pointer not data copy)
             all_members = new List<byte[]>();
             all_members.Add(header_ID);
+                        
+            packet_length = int2byteArray(26 + (data==null?0:data.Length), 16);
+
             all_members.Add(packet_length);
             all_members.Add(sender_ID);
             all_members.Add(receiver_ID);
@@ -409,6 +471,14 @@ namespace TaiSEIA
             all_members.Add(segment_ID);
             if(data!=null)
                 all_members.Add(data);
+
+            byte[] tmp = new byte[] { 0x13 };
+            for (int i = 1; i < all_members.Count; i++)
+            {
+                tmp = appendToByteArray(tmp, all_members[i]);
+            }
+            crc = int2byteArray(Compute_CRC16_Simple(tmp),16);
+
             all_members.Add(crc);
         }
         private void decode(byte[] raw_code)
@@ -449,7 +519,7 @@ namespace TaiSEIA
             Array.Copy(raw_code, 0, tmp, 0, packet_len - 2);
             if (checkCRC(tmp, crc))
             {
-                
+                Console.WriteLine("CRC is correct!!");
             }
             else
             {
@@ -520,7 +590,7 @@ namespace TaiSEIA
             return hexValuesByte;
         }
             
-        private ushort byte2int(byte[] b)//b must be big-endian format
+        private ushort byte2int(byte[] b)//b must be big-endian format and 2 bytes
         {
             byte[] tmp = new byte[b.Length];
             b.CopyTo(tmp, 0);
@@ -591,33 +661,80 @@ namespace TaiSEIA
         }
     }
 
-    public class TcpclientsWithMessage
+    public class HNAClients
     {
-        public string USER_ID;
-        public string HNA_ID;
+        
         public TcpClient cl;
-        public string msg="";
+        public List<string> msg = new List<string>(); //acts like a stack
 
-        public TcpclientsWithMessage()
+        public TaiSEIA_Packet_structure send_code;
+        private string USER_ID="0xA01";
+        private string HG_ID = "1";
+        private string HNA_ID="2";        
+        private Thread eventThread=null;
+
+        public HNAClients()
         {
         }
-        public TcpclientsWithMessage(TcpClient a)
+        public HNAClients(TcpClient a)
         {
             cl = a;
+            send_code = new TaiSEIA_Packet_structure();
         }
-        public void clearMessage()
-        {
-            msg = "";
+
+        public void setUserID(string a) { USER_ID = a; }
+        public string getUSERID() { return USER_ID; }
+        public void setHNAID(string a) { HNA_ID = a; }
+        public string getHNAID() { return HNA_ID; }
+        public void setSendCode(TaiSEIA_Packet_structure a) { send_code = new TaiSEIA_Packet_structure(a); }
+        
+        public void clearMessage(){ msg.Clear(); }
+        public string getMessage() { string tmp = msg[0]; msg.RemoveAt(0);  return tmp; }
+        public int setMessage(string a){
+            msg.Add(a);
+
+            if (eventThread != null)
+            {
+                if (eventThread.IsAlive == true)
+                    return -1;
+            }            
+
+            TaiSEIA_Packet_structure rcv_code = new TaiSEIA_Packet_structure(msg[0]);
+            
+            //Send Actions
+            if (rcv_code.isEqualFunctionID(0x0100))
+            { //Receive broadcast from HNA. Then start set ID process
+                eventThread = new Thread(new ThreadStart(eventThread_SetIDProcess));
+                eventThread.IsBackground = true;
+                eventThread.Start();
+            }
+
+
+            msg.RemoveAt(0);//Client processed the msg, so clean it
+            return 0;
         }
-        public string getMessage()
+
+        public void send2Client(string msg)
         {
-            string tmp = msg;
-            clearMessage();
-            return tmp;
-        }
-        public void setMessage(string a)
-        {
-            msg = a;
+            try
+            {
+                NetworkStream stream; //Creats a NetworkStream (used for sending and receiving data) 
+                stream = this.cl.GetStream(); //Gets The Stream of The Connection
+                byte[] data; // creates a new byte without mentioning the size of it cuz its a byte used for sending
+
+                string[] hexValues = msg.Split(' ');
+                data = new byte[hexValues.Length];
+
+                for (int j = 0; j < hexValues.Length; j++)
+                {
+                    data[j] = Convert.ToByte(Convert.ToInt32(hexValues[j], 16));
+                }
+                stream.Write(data, 0, data.Length); //Sends the real data
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
         }
         public bool isContainMessage()
         {
@@ -625,6 +742,51 @@ namespace TaiSEIA
                 return false;
             else
                 return true;
+        }
+
+        private void eventThread_SetIDProcess()
+        {
+            send_code = new TaiSEIA_Packet_structure();
+            send_code.setFunctionID(0xF0FF);
+            send2Client(send_code.ToString()); //Send ACK
+
+
+            string tmp_usrid = "0xA01";
+            string tmp_hgid = "1";
+            string tmp_hna_id = "2";
+
+            send_code = new TaiSEIA_Packet_structure();
+            send_code.setFunctionID(0x0102, new string[3] { Convert.ToInt64(tmp_usrid, 16).ToString(), tmp_hgid, tmp_hna_id });
+            send2Client(send_code.ToString());
+
+            while (msg.Count==0) { }//Wait for HNA's ACK msg
+
+            TaiSEIA_Packet_structure rcv_code = new TaiSEIA_Packet_structure(msg[0]);
+            if (rcv_code.isEqualFunctionID(0xF0FF))//Receive ACK
+            {
+                msg.RemoveAt(0);
+            }
+            else {
+                //do something
+            }
+
+            while (msg.Count == 0) { }//Wait for HNA's msg
+
+            rcv_code = new TaiSEIA_Packet_structure(msg[0]);
+            if (rcv_code.isEqualFunctionID(0xF100))//Receive Set Success!!
+            {
+                msg.RemoveAt(0);
+                send_code = new TaiSEIA_Packet_structure();
+                send_code.setFunctionID(0xF0FF);
+                send2Client(send_code.ToString()); //Send ACK
+            }
+            else
+            {
+                //do something
+            }
+
+            msg.Clear();
+            eventThread.Abort();
         }
     }
 }
