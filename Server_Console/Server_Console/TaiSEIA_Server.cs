@@ -638,7 +638,8 @@ namespace TaiSEIA
 
     public class HNAClients
     {
-        
+        private static Mutex mut = new Mutex();
+
         public TcpClient cln_socket;
         public List<string> rcv_cmd = new List<string>(); //acts like a queue
 
@@ -650,7 +651,7 @@ namespace TaiSEIA
         private string HNA_ID="2";
         private string Security_Type = "0";   
         private Thread eventThread=null;
-        private bool isClientDataSetted = false;
+        private bool isClientDataSetted = true;
 
         public HNAClients()
         {
@@ -691,7 +692,7 @@ namespace TaiSEIA
                 DateTime localDate = DateTime.Now;
                 String timestamp = localDate.ToString(new CultureInfo("en-US"));
                 Console.WriteLine("\n" + timestamp + " | Outgoing to Client " +
-                                   Convert.ToInt32(USER_ID, 16).ToString() + " : " + send_code.ToString());
+                                   Convert.ToInt32(USER_ID).ToString() + " : " + send_code.ToString());
 
                 Console.WriteLine(timestamp + " | Event " + TaiSEIA_Packet_structure.byte2int(send_code.event_ID) +
                                               ", Function ID : 0x" + Convert.ToInt32(send_code.function_ID[0]).ToString("X2") +
@@ -714,7 +715,7 @@ namespace TaiSEIA
                 DateTime localDate = DateTime.Now;
                 String timestamp = localDate.ToString(new CultureInfo("en-US"));
                 Console.WriteLine("\n" + timestamp + " | Outgoing to Client " +
-                                   Convert.ToInt32(USER_ID, 16).ToString() + " : " + send_code.ToString());
+                                   Convert.ToInt32(USER_ID).ToString() + " : " + send_code.ToString());
 
                 Console.WriteLine(timestamp + " | Event " + TaiSEIA_Packet_structure.byte2int(send_code.event_ID) +
                                               ", Function ID : 0x" + Convert.ToInt32(send_code.function_ID[0]).ToString("X2") +
@@ -742,6 +743,7 @@ namespace TaiSEIA
                 {
                     while (cln_socket.GetStream().DataAvailable && isClientDataSetted)
                     {
+                        mut.WaitOne();
                         byte[] datalength = new byte[3];
                         cln_socket.GetStream().Read(datalength, 0, 3);
                         byte[] data = new byte[Convert.ToInt32(datalength[2])];
@@ -762,7 +764,7 @@ namespace TaiSEIA
                         //Message string output                    
                         DateTime localDate = DateTime.Now;
                         String timestamp = localDate.ToString(new CultureInfo("en-US"));                                            
-                        Console.WriteLine("\n"+timestamp + " | Incoming from Client " + Convert.ToInt32(USER_ID,16).ToString() +" : " + message);
+                        Console.WriteLine("\n"+timestamp + " | Incoming from Client " + Convert.ToInt32(USER_ID).ToString() +" : " + message);
 
                         rcv_cmd.Add(message);
                         rcv_code = new TaiSEIA_Packet_structure(data);
@@ -790,7 +792,7 @@ namespace TaiSEIA
                             Console.Write("TaiSEIA Server>");
                             rcv_cmd.RemoveAt(0);
                         }
-
+                        mut.ReleaseMutex();
 
                     }
                 }                
@@ -829,6 +831,17 @@ namespace TaiSEIA
             int status = 0;
             while (rcv_cmd.Count == 0) { }//Wait for HNA's ACK msg
 
+            while (rcv_cmd[0] == null) { };
+            //if (rcv_cmd.Count == 0)
+            //{
+            //    Console.WriteLine("rcv_cmv is fucking empty!!!!");
+            //}
+            //else
+            //{
+            //    Console.WriteLine("==================================");
+            //    Console.WriteLine(rcv_cmd[0]);
+            //    Console.WriteLine("==================================");
+            //}
             TaiSEIA_Packet_structure rcv_code = new TaiSEIA_Packet_structure(rcv_cmd[0]);
             if (rcv_code.isEqualFunctionID(fcn_code))//Receive ACK
             {
@@ -862,11 +875,15 @@ namespace TaiSEIA
             if (waitForCode(0xF100)==0)
                 sendFCNCode(1, 0xF0FF); //Send ACK
 
-            Console.WriteLine("\n EVENT 1 : Succeed and terminated...");
 
-            Console.Write("TaiSEIA Server>");
+
+            mut.WaitOne();
             rcv_cmd.Clear();
             eventThread.Abort();
+            mut.ReleaseMutex();
+            Console.WriteLine("\n EVENT 1 : Succeed and terminated...");
+            Console.Write("TaiSEIA Server>");
+            //Task.Delay(200);
         }
 
         private void eventThread_SecurityConfirmProcess()
@@ -885,11 +902,14 @@ namespace TaiSEIA
             if (waitForCode(0xF100) == 0)
                 sendFCNCode(1, 0xF0FF); //Send ACK
 
-            Console.WriteLine("\n EVENT 2 : Succeed and terminated...");
-
-            Console.Write("TaiSEIA Server>");
+            mut.WaitOne();
             rcv_cmd.Clear();
             eventThread.Abort();
+            mut.ReleaseMutex();
+
+            Console.WriteLine("\n EVENT 2 : Succeed and terminated...");
+            Console.Write("TaiSEIA Server>");
+            //Task.Delay(200);
         }
 
 

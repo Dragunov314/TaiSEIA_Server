@@ -36,7 +36,7 @@ namespace Server_Console
             server.clients[0].setClientData(input[0], input[1], input[2], input[3]);
             Console.WriteLine("Input Completed!!");
             Console.WriteLine("USER ID : "+input[0]+ ", HG ID : "+input[1]+
-                              "HNA ID : "+input[2]+", Security Type : "+ input[3]);
+                              ", HNA ID : "+input[2]+", Security Type : "+ input[3]);
             Console.WriteLine("=================================================");
 
 
