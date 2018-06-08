@@ -48,7 +48,7 @@ namespace Socket_Client
         {
 
             stream = client.GetStream(); //Gets The Stream of The Connection
-            Thread t = new Thread(() => // Thread (like Timer)
+            Thread t = new Thread(() => // Thread 
             {
                 while ((i = stream.Read(datalength, 0, 3)) != 0)//Keeps Trying to Receive the Size of the Message or Data
                 {
