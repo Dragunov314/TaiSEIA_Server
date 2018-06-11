@@ -24,6 +24,7 @@ namespace Server_Console
             while (server.clients.Count == 0) { }
 
             string[] input = new string[4];
+            Console.ForegroundColor = ConsoleColor.Magenta;
             Console.WriteLine("===================Input Form===================");
             Console.Write("Enter USER ID : ");
             input[0] = "2561";// Console.ReadLine();
@@ -38,13 +39,15 @@ namespace Server_Console
             Console.WriteLine("USER ID : "+input[0]+ ", HG ID : "+input[1]+
                               ", HNA ID : "+input[2]+", Security Type : "+ input[3]);
             Console.WriteLine("=================================================");
-
+            Console.ResetColor();
 
             while (true)
             {
-                string cmd;
+                string cmd;                
                 Console.Write("TaiSEIA Server> ");
+                
                 cmd = Console.ReadLine();
+                
 
                 if (cmd.Equals("Q") || cmd.Equals("q"))
                     break;                                  
