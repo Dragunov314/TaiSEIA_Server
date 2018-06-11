@@ -645,7 +645,7 @@ namespace TaiSEIA
         private string HNA_ID="2";
         private string Security_Type = "0";   
         private Thread eventThread=null;
-        private bool isClientDataSetted = true;
+        private bool isClientDataSetted = true;//IMPORTANT:TURN TO FALSE IF YOU WANT TO INPUT YOURSELF!!!
 
         public HNAClients()
         {

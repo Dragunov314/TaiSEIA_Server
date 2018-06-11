@@ -25,20 +25,20 @@ namespace Server_Console
 
             string[] input = new string[4];
             Console.ForegroundColor = ConsoleColor.Magenta;
-            Console.WriteLine("===================Input Form===================");
+            Console.WriteLine("===================Input Form==============================\n");
             Console.Write("Enter USER ID : ");
-            input[0] = "2561";// Console.ReadLine();
+            input[0] = "2561";// Console.ReadLine();//
             Console.Write("Enter HG ID : ");
-            input[1] = "1";// Console.ReadLine();
+            input[1] = "1";//Console.ReadLine();//
             Console.Write("Enter HNA ID : ");
-            input[2] = "2";// Console.ReadLine();
+            input[2] = "2";// Console.ReadLine();//
             Console.Write("Enter Security Type : ");
-            input[3] = "0";// Console.ReadLine();
+            input[3] = "0";//Console.ReadLine();// 
             server.clients[0].setClientData(input[0], input[1], input[2], input[3]);
             Console.WriteLine("Input Completed!!");
             Console.WriteLine("USER ID : "+input[0]+ ", HG ID : "+input[1]+
                               ", HNA ID : "+input[2]+", Security Type : "+ input[3]);
-            Console.WriteLine("=================================================");
+            Console.WriteLine("\n===========================================================");
             Console.ResetColor();
 
             while (true)
