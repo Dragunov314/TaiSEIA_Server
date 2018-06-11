@@ -43,7 +43,8 @@ namespace Server_Console
 
             while (true)
             {
-                string cmd;                
+                string cmd;       
+                Console.ResetColor();         
                 Console.Write("TaiSEIA Server> ");
                 
                 cmd = Console.ReadLine();

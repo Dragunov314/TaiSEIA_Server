@@ -43,11 +43,7 @@ namespace TaiSEIA
                     HNAClients tmp = new HNAClients(server.AcceptTcpClient());
 
                     clients.Add(tmp);  //Waits for the Client To Connect
-
-                    //Console.ForegroundColor = ConsoleColor.Cyan;
-                    //Console.WriteLine("TaiSEIA Server>");
-                    //Console.ResetColor();
-
+                    
                     if (clients[clients.Count - 1].cln_socket.Connected) // If you are connected
                     {
                         clients[clients.Count - 1].StartReceive();
@@ -659,7 +655,7 @@ namespace TaiSEIA
             cln_socket = a;
             send_code = new TaiSEIA_G2N_Packet();
 
-            Console.ForegroundColor = ConsoleColor.Red;
+            Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("\nConnected To Client!!");
             Console.WriteLine("===============Connection Information======================\n");            
             Console.WriteLine("IP Address     : " + IPAddress.Parse(((IPEndPoint)a.Client.LocalEndPoint).Address.ToString()));
@@ -707,6 +703,7 @@ namespace TaiSEIA
                 byte[] tmp = send_code.ToByteArray();
                 stream.Write(tmp, 0, tmp.Length); //Sends the real data
 
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
                 DateTime localDate = DateTime.Now;
                 String timestamp = localDate.ToString(new CultureInfo("en-US"));
                 Console.WriteLine("\n" + timestamp + " | Outgoing to Client " +
@@ -730,6 +727,7 @@ namespace TaiSEIA
                 stream = this.cln_socket.GetStream(); //Gets The Stream of The Connection                
                 stream.Write(msg, 0, msg.Length); //Sends the real data
 
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
                 DateTime localDate = DateTime.Now;
                 String timestamp = localDate.ToString(new CultureInfo("en-US"));
                 Console.WriteLine("\n" + timestamp + " | Outgoing to Client " +
@@ -780,7 +778,9 @@ namespace TaiSEIA
                                     message = message + Convert.ToInt32(data[j]).ToString("X2");
                             }
 
-                            //Message string output                    
+                            //Message string output   
+                            Console.ForegroundColor = ConsoleColor.DarkCyan;
+
                             DateTime localDate = DateTime.Now;
                             String timestamp = localDate.ToString(new CultureInfo("en-US"));
                             Console.WriteLine("\n" + timestamp + " | Incoming from Client " + Convert.ToInt32(USER_ID).ToString() + " : " + message);
@@ -812,17 +812,16 @@ namespace TaiSEIA
         private void respond2rcv_cmd()
         {
             if (rcv_code.isEqualFunctionID(0x0100)) //Start Event 1
-            {
-                Console.ForegroundColor = ConsoleColor.DarkCyan;
+            {                
                 func_table[0x0100](1);
             }
             else if (rcv_code.isEqualFunctionID(0x0201))//Start Event 2 & 3
-            {
-                Console.ForegroundColor = ConsoleColor.DarkCyan;
+            {                
                 func_table[0x0201](1);
             }
             else if (eventThread.IsAlive == false)
-            {                
+            {
+                Console.ResetColor(); 
                 Console.Write("TaiSEIA Server>");                
                 rcv_cmd.RemoveAt(0);//remove first index after processed the msg
             }
