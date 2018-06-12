@@ -319,6 +319,15 @@ namespace TaiSEIA
                     data[0] = Convert.ToByte(tmp);
                 }
             }
+            else if (this.isEqualFunctionID(0x0400))
+            {
+                if (cmd_data == null)
+                    throw new System.ArgumentException("Data is null!! Requires DATA!!!", "cmd_data");
+
+                byte[] tmp_dt = hexString2byteArray(cmd_data[0]);
+                data = new byte[tmp_dt.Length];
+                Array.Copy(tmp_dt, 0, data, 0, data.Length);
+            }
             else
             {
                 data = null;//Clear data
@@ -619,6 +628,135 @@ namespace TaiSEIA
         }
     }
 
+    public class TaiSEIA_N2S_Packet
+    {
+        /// <summary>
+        /// HNA 2 SA Packet Structure
+        /// 
+        ///   請求封包結構:
+        ///   Byte          Name                                  Description
+        ///    0    |    Packet Length   | The length of whole packet, including packet length byte itself. (0-5, 255 is reserved)
+        ///    1    |       SA ID        | Smart appliance's identification number, representing which type of appliance.
+        ///    2    |  R/W & service ID  | bit 7 : Read(0)/Write(1) packet, bit 0~6 : Service ID that SA is capable of.
+        ///    3    |        MSB         | Most significant byte of data
+        ///    4    |        LSB         | Least significant byte of data
+        ///    5    |     Check Byte     | Bit operation XOR from 0~4 byte and the result is Check Byte.
+        ///    
+        /// 
+        /// ============================IMPORTANT!!==================================
+        /// If you modified any members, you must call function refreshAllMembers()!!
+        /// Otherwise packet_length and Check Byte will not be updated!!
+        /// =========================================================================
+        /// </summary>
+        public byte packet_length;
+        public byte SA_ID;
+        public byte service_ID;
+        public byte[] data;
+        public byte check_code;
+
+        public TaiSEIA_N2S_Packet()
+        {
+            //Creates a dummy instance
+            packet_length = 0x06;
+            SA_ID = 0x01;
+            service_ID = 0x00;
+            data = new byte[2] { 0x00, 0x01 };
+            check_code = 0x06;
+        }
+
+        public TaiSEIA_N2S_Packet(byte[] input)
+        {
+            packet_length = input[0];
+            SA_ID = input[1];
+            service_ID = input[2];
+            data = new byte[input.Length-4];
+            Array.Copy(input, 3, data, 0, data.Length);
+            check_code = input[input.Length - 1];
+            checkCheckCode();
+        }
+        public void setSA_ID(int a)
+        {
+            //0x00-0xFF
+            if (a > 0xFF || a<0x00)
+                throw new System.ArgumentException("Parameter is out of range", "a");
+            SA_ID = Convert.ToByte(a);
+            refreshAllMembers();
+        }
+        public void setService_ID(int a,byte[] dt=null)
+        {
+            //0x00-0xFF
+            if (a > 0xFF || a < 0x00)
+                throw new System.ArgumentException("Parameter is out of range", "a");
+            service_ID = Convert.ToByte(a);
+
+            if (dt != null)
+            {
+                data = new byte[dt.Length];
+                Array.Copy(dt, 0, data, 0, dt.Length);
+            }
+            refreshAllMembers();
+        }
+        public byte[] ToByteArray()
+        {
+            byte[] btArray = new byte[4+data.Length];
+            btArray[0] = packet_length;
+            btArray[1] = SA_ID;
+            btArray[2] = service_ID;
+            Array.Copy(data, 0, btArray, 3, data.Length);
+            btArray[btArray.Length - 1] = check_code;
+            return btArray;
+        }
+        public override string ToString()
+        {
+            string tmp = packet_length.ToString("X2");
+            tmp += " " + SA_ID.ToString("X2");
+            tmp += " " + service_ID.ToString("X2");
+
+            for (int i = 0; i < data.Length; i++)
+            {
+                tmp += " " + data[i].ToString("X2");
+            }
+
+            tmp += " " + check_code.ToString("X2");
+            return tmp;
+        }
+
+        private void refreshAllMembers()
+        {
+            packet_length = Convert.ToByte(4+data.Length);
+            byte[] tmp = new byte[packet_length - 1];
+            Array.Copy(ToByteArray(), 0, tmp, 0, tmp.Length);            
+            check_code = Compute_check_code_XOR(tmp);
+        }
+
+        private bool checkCheckCode()
+        {
+            byte[] b = new byte[packet_length - 1];
+            Array.Copy(ToByteArray(), 0, b, 0, b.Length);
+            byte a = Compute_check_code_XOR(b);
+            if (a == b[b.Length - 1])
+            {
+                //Console.WriteLine("SA Check Code is correct!!");
+                return true;
+            }
+            else
+            {
+                Console.WriteLine("ERROR : SA Check Code is INCORRECT!!");
+                return false;
+            }
+            
+        }
+        public static byte Compute_check_code_XOR(byte[] x)
+        {
+            byte result = Convert.ToByte(x[0]^x[1]);
+            for (int i = 2; i < x.Length; i++)
+            {
+                result = Convert.ToByte(result ^ x[i]);
+            }
+            return result;
+        }
+    }
+
     public class HNAClients
     {
         private static Mutex mut = new Mutex();
@@ -628,7 +766,8 @@ namespace TaiSEIA
         public TcpClient cln_socket;
         public List<string> rcv_cmd = new List<string>(); //acts like a queue
         public List<int> support_security_type = new List<int>();
-        Dictionary<int, Func<int,int>> func_table = new Dictionary<int, Func<int,int>>();        
+        public Dictionary<int, Func<int,int>> func_table = new Dictionary<int, Func<int,int>>();
+        public Smart_Appliance paired_SA;
         
 
         public byte[] TaiSEIA_protocol_version = new byte[2];
@@ -646,6 +785,7 @@ namespace TaiSEIA
         private string Security_Type = "0";   
         private Thread eventThread=null;
         private bool isClientDataSetted = true;//IMPORTANT:TURN TO FALSE IF YOU WANT TO INPUT YOURSELF!!!
+        private bool isInAction = false;
 
         public HNAClients()
         {
@@ -672,6 +812,7 @@ namespace TaiSEIA
             func_table.Add(0x0201, func_0x0201);
             func_table.Add(0x0301, func_0x0301);
             func_table.Add(0x0303, func_0x0303);
+            func_table.Add(0x0400, func_0x0400);
             func_table.Add(0xF100, func_0xF100);
             func_table.Add(0xF0FF, func_0xF0FF);
         }
@@ -746,12 +887,19 @@ namespace TaiSEIA
 
         public void StartReceive()
         {
-            Thread t = new Thread(new ThreadStart(clientReceiveData));
+            Thread t = new Thread(new ThreadStart(receiveClientData));
             t.IsBackground = true;
             t.Start();
         }
 
-        private void clientReceiveData()
+        public void sendCMD2SA(int tt)
+        {
+            isInAction = true;
+            func_table[0x0400](1);
+            isInAction = false;
+        }
+
+        private void receiveClientData()
         {
             try
             {                
@@ -785,8 +933,8 @@ namespace TaiSEIA
                             String timestamp = localDate.ToString(new CultureInfo("en-US"));
                             Console.WriteLine("\n" + timestamp + " | Incoming from Client " + Convert.ToInt32(USER_ID).ToString() + " : " + message);
 
-                            rcv_cmd.Add(message);
                             rcv_code = new TaiSEIA_G2N_Packet(data);
+                            rcv_cmd.Add(message);                            
 
                             Console.WriteLine(timestamp + " | Event " + TaiSEIA_G2N_Packet.byte2int(rcv_code.event_ID) +
                                               ", Function ID : 0x" + Convert.ToInt32(rcv_code.function_ID[0]).ToString("X2") +
@@ -800,7 +948,7 @@ namespace TaiSEIA
             }
             catch (Exception e)
             {
-                Console.WriteLine(e.Message);
+                Console.WriteLine("ERROR in receiveClientData() : "+e.Message + "\n");
             }
         }
 
@@ -812,17 +960,17 @@ namespace TaiSEIA
         private void respond2rcv_cmd()
         {
             if (rcv_code.isEqualFunctionID(0x0100)) //Start Event 1
-            {                
+            {
                 func_table[0x0100](1);
             }
             else if (rcv_code.isEqualFunctionID(0x0201))//Start Event 2 & 3
-            {                
-                func_table[0x0201](1);
-            }
-            else if (eventThread.IsAlive == false)
             {
-                Console.ResetColor(); 
-                Console.Write("TaiSEIA Server>");                
+                func_table[0x0201](1);
+            }            
+            else if (eventThread.IsAlive == false && isInAction == false)
+            {
+                Console.ResetColor();
+                Console.Write("TaiSEIA Server>");
                 rcv_cmd.RemoveAt(0);//remove first index after processed the msg
             }
         }
@@ -872,24 +1020,24 @@ namespace TaiSEIA
         /// USE ONLY FOR EVENT THREAD!!!
         /// wait_time_max unit : millisecond
         /// </summary>
-        private int waitForCode(int fcn_code, double wait_time_max = 3000)
+        private int waitForCode(int fcn_code, double wait_time_max = 5000)
         {
-            int status = 0;
+            int status = 0;            
             DateTime time_before = DateTime.Now;
             double wait_time = 0;
             while (rcv_cmd.Count == 0 && wait_time <= wait_time_max) {
-                wait_time = ((TimeSpan)(DateTime.Now - time_before)).TotalMilliseconds;
+                wait_time = ((TimeSpan)(DateTime.Now - time_before)).TotalMilliseconds;                
             }//Wait for HNA's ACK msg
-
-            Task.Delay(10);//MUST ADD!! Wait for rcv_cmd to store data...
-            if (rcv_cmd[0] == null)
+            
+            Task.Delay(20);//MUST ADD!! Wait for rcv_cmd to store data...
+            if (rcv_cmd == null)
             {
-                Console.WriteLine("ERROR : rcv_cmd[0] is a null pointer!!");
+                Console.WriteLine("ERROR : rcv_cmd[0] is a null pointer!!");                
                 return -1;
             }
             if (wait_time > wait_time_max)
             {
-                Console.WriteLine("ERROR : Wait time is larger than wait_time_max {0}", wait_time_max);
+                Console.WriteLine("ERROR : Wait time is larger than wait_time_max {0}", wait_time_max);                
                 return -1;
             }
 
@@ -899,92 +1047,118 @@ namespace TaiSEIA
                 //Respond to message here
                 try
                 {
-                    func_table[fcn_code](1);
+                    func_table[fcn_code](0);
                 }
                 catch(Exception e)
                 {
-                    Console.WriteLine(e.ToString());
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("\nERROR : "+e.ToString()+"\n");
+                    Console.ResetColor();
                 }                
             }            
             else
-            {
-                //do something
-                Console.WriteLine("ERROR : Function CODE is no expected!! Desired {0} , Received {1}",
-                                  fcn_code, System.Text.Encoding.ASCII.GetString(rcv_code.function_ID));
+            {                
                 rcv_cmd.RemoveAt(0);//remove first index after processed the msg
-                status = -1;//Failed to wait for desired function ID
+                status = -1;//Failed to wait for desired function ID       
+                string tmp = String.Format("\nERROR : Function CODE is no expected!! Desired {0} , Received {1}{2}",
+                                  fcn_code, rcv_code.function_ID[0].ToString("X2"), rcv_code.function_ID[1].ToString("X2"));
+                throw new System.ArgumentException(tmp);
             }
-
+            
             return status;// 0: success, -1: some errors occurred
         }
 
         private void eventThread_SetIDProcess() //Event 1
-        {            
-            Console.WriteLine("\nEVENT 1 : Setup ID process starting....");
-            current_event = 1;
-            //Send ACK
-            sendFCNCode(current_event,0xF0FF);
+        {
+            try
+            {
+                Console.WriteLine("\nEVENT 1 : Setup ID process starting....");
+                current_event = 1;
+                //Send ACK
+                sendFCNCode(current_event, 0xF0FF);
 
-            //Set HNA's ID & wait for ACK
-            string[] tmp_str = new string[3] { USER_ID, HG_ID, HNA_ID };
-            sendFCNCode(current_event, 0x0102,false,tmp_str);
+                //Set HNA's ID & wait for ACK
+                string[] tmp_str = new string[3] { USER_ID, HG_ID, HNA_ID };
+                sendFCNCode(current_event, 0x0102, false, tmp_str);
 
-            //Wait for HNA's Receive Set Success & Send ACK!!
-            waitForCode(0xF100);            
+                //Wait for HNA's Receive Set Success & Send ACK!!
+                waitForCode(0xF100);                                
+            }
+            catch (Exception e)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine(e.ToString() + "\n");
+                Console.WriteLine("\nEVENT "+current_event+" : FAILED and terminating...\n");
+                Console.ResetColor();
+                Console.Write("TaiSEIA Server>");
+
+                rcv_cmd.Clear();
+                eventThread.Abort();
+            }
 
             Console.WriteLine("\nEVENT 1 : Succeed and terminated...");
             Console.ResetColor();
-            Console.Write("TaiSEIA Server>");            
-
+            Console.Write("TaiSEIA Server>");
             rcv_cmd.Clear();
             eventThread.Abort();
+
         }
 
         private void eventThread_SecureRegist_Process() //Event 2&3 set scurity and start registration
         {
-            Console.WriteLine("\nEVENT 2 : Security confirmation process starting....");
-            current_event = 2;
+            try {
+                Console.WriteLine("\nEVENT 2 : Security confirmation process starting....");
+                current_event = 2;
 
-            sendFCNCode(current_event, 0xF0FF,true); //Send ACK
+                sendFCNCode(current_event, 0xF0FF, true); //Send ACK
 
-            //Set Security Type & wait for ACK
-            sendFCNCode(current_event, 0x0203,true,new string[]{Security_Type});
+                //Set Security Type & wait for ACK
+                sendFCNCode(current_event, 0x0203, true, new string[] { Security_Type });
 
-            //Wait for HNA's Receive Set Success & send ACK!!
-            waitForCode(0xF100);
+                //Wait for HNA's Receive Set Success & send ACK!!
+                waitForCode(0xF100);
 
-            Console.WriteLine("\nEVENT 2 : Succeed and continue to event 3");
-            Console.WriteLine("\nEVENT 3 : Sign up process starting....");
-            current_event = 3;
-            //Inform HNA to start registration & wait for ACK
-            sendFCNCode(current_event, 0x0300, true);
+                Console.WriteLine("\nEVENT 2 : Succeed and continue to event 3");
+                Console.WriteLine("\nEVENT 3 : Registration process starting....");
+                current_event = 3;
+                //Inform HNA to start registration & wait for ACK
+                sendFCNCode(current_event, 0x0300, true);
 
-            //Wait for HNA inform HNA's support function & send ACK
-            waitForCode(0x0301);
+                //Wait for HNA inform HNA's support function & send ACK
+                waitForCode(0x0301);
 
-            //Wait for HNA informing Smart Appliance's ability
-            waitForCode(0x0303);
+                //Wait for HNA informing Smart Appliance's ability
+                waitForCode(0x0303);
 
-            //Wait for HNA's registration complete signal
-            waitForCode(0xF100);
+                //Wait for HNA's registration complete signal
+                waitForCode(0xF100);
+            }
+            catch (Exception e)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine(e.ToString());
+                Console.WriteLine("\nEVENT "+current_event+" : FAILED and terminating...\n");
+                Console.ResetColor();
+                Console.Write("TaiSEIA Server>");
+
+                rcv_cmd.Clear();
+                eventThread.Abort();
+            }
+
 
             Console.WriteLine("\nEVENT 3 : Succeed and terminated...");
             Console.ResetColor();
-            Console.Write("TaiSEIA Server>");            
+            Console.Write("TaiSEIA Server>");
 
             rcv_cmd.Clear();
             eventThread.Abort();
         }
-
 
         /// <summary>
         /// USE ONLY IN EVENT THREAD!!!!
         /// </summary>
         /// <param name="a"></param>
         /// <returns></returns>
-        
-
-        
         private int func_0x0100(int a)
         {
             eventThread = new Thread(new ThreadStart(eventThread_SetIDProcess));
@@ -1052,13 +1226,35 @@ namespace TaiSEIA
         private int func_0x0303(int a)
         {
             //Store SA DATA CODE HERE...
-
+            paired_SA = new Smart_Appliance(rcv_code.data);            
             //*************************
             sendFCNCode(current_event, 0xF0FF);//Send ACK
             rcv_cmd.RemoveAt(0);//remove first index after processed the msg
             return 0;
         }
-        
+
+        private int func_0x0400(int a)//1: Send, 0: Receive
+        {
+
+            // Test CODE
+            if (a == 1)
+            {
+                paired_SA.msg_code.setService_ID(0x80, new byte[] { 0x00, 0x00 });
+                current_event = 5;
+                sendFCNCode(current_event, 0x400, true, new string[] { paired_SA.msg_code.ToString() });                
+                waitForCode(0x0400);
+            }
+            if (a == 0)
+            {
+                sendFCNCode(current_event, 0xF0FF);//Send ACK
+                rcv_cmd.RemoveAt(0);//remove first index after processed the msg
+            }
+            //
+
+            return 0;
+        }
+
+
         private int func_0xF100(int a)
         {
             sendFCNCode(current_event, 0xF0FF);//Send ACK
@@ -1068,8 +1264,114 @@ namespace TaiSEIA
         private int func_0xF0FF(int a)
         {
             rcv_cmd.RemoveAt(0);//remove first index after processed the msg
+            //Console.WriteLine("\nSEGMENT======\n");
             return 0;
         }
         //-----------
+    }
+
+    /// <summary>
+    /// This is a base class of all smart appliances. 
+    /// DO NOT CREATE AN INSTANCE OF THIS CLASS!!
+    /// </summary>
+    public class Smart_Appliance
+    {
+        public TaiSEIA_N2S_Packet msg_code;
+        public byte SA_ID;
+        public List<byte[]> support_function = new List<byte[]>();
+        public string Brand;
+        public string Model;
+        public int data_type; //0:一般資料型態, 1:多位元組資料型態
+        public int[] TaiSEIA_Device_Monitor_Version = new int[2];
+        public int Baud_Rate;
+        public int Device_Type;//0:Home appliance, 1:Power generator, 2:Energy storing, 3:Sensor
+
+        private int[] BR_Table = new int[] {1200,2400,4800,9600,19200,38400,57600};
+
+
+        public Smart_Appliance(byte[] regist_msg)
+        {
+            //Deal with the Registration Responding Packet(註冊回應封包) here.
+
+            // Check check code
+            byte[] tmp2 = new byte[Convert.ToInt32(regist_msg[0]) - 1];
+            Array.Copy(regist_msg, 0, tmp2, 0, tmp2.Length);
+            byte cc = TaiSEIA_N2S_Packet.Compute_check_code_XOR(tmp2);
+            if (cc == regist_msg[regist_msg.Length - 1])
+            {
+                //Console.WriteLine("Registration Responding Packet check code is correct!!");
+
+                byte tmp = regist_msg[2];
+                data_type = (tmp & Convert.ToInt32("1000000", 2)) >> 7;// bit 7 is data type, bit 4-6 is reserved
+                Device_Type = tmp & Convert.ToInt32("00001111", 2);   // bit 0-3 is device type
+
+                TaiSEIA_Device_Monitor_Version[0] = regist_msg[3]; //Main verseion
+                TaiSEIA_Device_Monitor_Version[1] = regist_msg[4]; //Sub verseion
+
+                tmp = regist_msg[5];
+                Baud_Rate = BR_Table[(tmp & Convert.ToInt32("00001111", 2))];
+
+                //bit 4-7 segment code order ASSUME NO SEGMENT
+
+                //Set SA ID
+                SA_ID = regist_msg[7];
+
+                int[] null_index = new int[2];
+                int j = 0;
+                for (int i = 8; i < 28; i++)
+                {
+                    if (regist_msg[i] == 0x00)
+                    {
+                        null_index[j] = i;
+
+                        if (j == 1)
+                            break;
+
+                        j++;
+                    }
+                }
+
+                //Set Brand
+                tmp2 = new byte[null_index[0] - 8];
+                Array.Copy(regist_msg, 8, tmp2, 0, tmp2.Length);
+                Brand = System.Text.Encoding.ASCII.GetString(tmp2);
+
+                //Set Model
+                tmp2 = new byte[null_index[1] - null_index[0] - 1];
+                Array.Copy(regist_msg, null_index[0] + 1, tmp2, 0, tmp2.Length);
+                Model = System.Text.Encoding.ASCII.GetString(tmp2);
+
+                //Add support function
+                for (int i = null_index[1] + 1; i < regist_msg.Length - 1; i += 3)
+                {
+                    byte[] tmp3 = new byte[3];
+                    Array.Copy(regist_msg, i, tmp3, 0, tmp3.Length);
+                    support_function.Add(tmp3);
+                }
+
+                msg_code = new TaiSEIA_N2S_Packet();
+                msg_code.setSA_ID(SA_ID);                          
+            }
+            else
+            {
+                Console.WriteLine("Registration Responding Packet check code is INCORRECT!!");
+                Console.WriteLine("Smart Appliance Class construction failed!!");
+            }                       
+        }
+        virtual public void ActionCode(byte[] cmd)
+        {
+            //Leave to each SA class to complete the definition
+        }            
+    }
+
+    public class Electric_Fan : Smart_Appliance
+    {
+        public Electric_Fan(byte[] reg):base(reg)
+        {
+
+        }
+        override public void ActionCode(byte[] cmd)
+        {
+        }
     }
 }

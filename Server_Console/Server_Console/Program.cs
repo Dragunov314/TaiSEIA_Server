@@ -52,6 +52,10 @@ namespace Server_Console
 
                 if (cmd.Equals("Q") || cmd.Equals("q"))
                     break;                                  
+                else if(cmd.Equals("O") || cmd.Equals("o"))
+                {
+                    server.clients[0].sendCMD2SA(0);
+                }
                 else
                 {
                     server.ServerSend(cmd);
