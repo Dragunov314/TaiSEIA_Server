@@ -54,11 +54,11 @@ namespace Server_Console
                     break;                                  
                 else if(cmd.Equals("O") || cmd.Equals("o"))
                 {
-                    server.clients[0].sendCMD2SA(0x0400);
+                    server.clients[0].sendFCN2Client(0x0400,new string[] {"1","0x00","1"});
                 }
                 else if (cmd.Equals("R") || cmd.Equals("r"))
                 {
-                    server.clients[0].sendCMD2SA(0x0005);
+                    server.clients[0].sendFCN2Client(0x0005);
                 }
                 else
                 {

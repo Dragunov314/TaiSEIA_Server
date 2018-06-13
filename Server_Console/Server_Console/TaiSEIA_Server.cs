@@ -766,7 +766,7 @@ namespace TaiSEIA
         public TcpClient cln_socket;
         public List<string> rcv_cmd = new List<string>(); //acts like a queue
         public List<int> support_security_type = new List<int>();
-        public Dictionary<int, Func<int,int>> func_table = new Dictionary<int, Func<int,int>>();
+        public Dictionary<int, Func<int, string[], int>> func_table = new Dictionary<int, Func<int,string[],int>>();
         public Smart_Appliance paired_SA;
         
 
@@ -787,9 +787,6 @@ namespace TaiSEIA
         private bool isClientDataSetted = true;//IMPORTANT:TURN TO FALSE IF YOU WANT TO INPUT YOURSELF!!!
         private bool isInAction = false;
 
-        public HNAClients()
-        {
-        }
         public HNAClients(TcpClient a)
         {
             cln_socket = a;
@@ -906,11 +903,11 @@ namespace TaiSEIA
             eventThread.Start();
         }
 
-        public void sendCMD2SA(int fcn)
+        public void sendFCN2Client(int fcn,string[] dt=null)
         {
             isInAction = true;
             try {
-                func_table[fcn](1);
+                func_table[fcn](1,dt);
             }
             catch (Exception e)
             {
@@ -1065,7 +1062,7 @@ namespace TaiSEIA
                 int cmd = TaiSEIA_G2N_Packet.byte2int(rcv_code.function_ID);
                 try
                 {                    
-                    func_table[cmd](0); 
+                    func_table[cmd](0,null); 
                     if(cmd!=0xF0FF)
                         sendFCNCode(current_event, 0xF0FF);//Send ACK
                     rcv_cmd.RemoveAt(0);//remove first index after processed the msg                    
@@ -1164,9 +1161,9 @@ namespace TaiSEIA
         /// <param name="a"></param>
         /// <returns></returns>
 
-        private int func_0x0005(int a)  //Reset function
+        private int func_0x0005(int isSend,string[] dt = null)  //Reset function
         {
-            if (a == 1)//Send
+            if (isSend == 1)//Send
             {                
                 current_event = 5;
                 sendFCNCode(current_event, 0x0005, true, new string[] {"FF FF FF FF"});
@@ -1174,13 +1171,13 @@ namespace TaiSEIA
             }
             return 0;
         }
-        private int func_0x0100(int a)
+        private int func_0x0100(int isSend, string[] dt = null)
         {
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("\nEVENT 1 : Setup ID process is starting....");
             return 0;
         }
-        private int func_0x0201(int a)
+        private int func_0x0201(int isSend, string[] dt = null)
         {
             //add support sercurity type
             for (int i = 0; i < rcv_code.data.Length; i++)
@@ -1189,7 +1186,7 @@ namespace TaiSEIA
             }            
             return 0;
         }
-        private int func_0x0301(int a)
+        private int func_0x0301(int isSend, string[] dt = null)
         {
             //process data                    
             byte[] tmp = rcv_code.data;
@@ -1231,7 +1228,7 @@ namespace TaiSEIA
             return 0;
         }
 
-        private int func_0x0303(int a)
+        private int func_0x0303(int isSend, string[] dt = null)
         {
             //Store SA DATA CODE HERE...
 
@@ -1249,18 +1246,19 @@ namespace TaiSEIA
             return 0;
         }
 
-        private int func_0x0400(int a)//1: Send, 0: Receive
+        private int func_0x0400(int isSend, string[] dt=null)//1: Send, 0: Receive
         {
 
             // Test CODE
-            if (a == 1)
-            {                
-                paired_SA.ActionCode(new byte[] { 0 });
+            if (isSend == 1)
+            {
+                //new string[] { "1", "0x00", "1" }
+                paired_SA.ActionCode(dt);
                 current_event = 5;
                 sendFCNCode(current_event, 0x400, true, new string[] { paired_SA.msg_code.ToString() });                
                 waitForCode(0x0400);
             }
-            if (a == 0)
+            if (isSend == 0)
             {
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("HNA sent monitored-device responding packet");
@@ -1269,9 +1267,9 @@ namespace TaiSEIA
 
             return 0;
         }
-        private int func_0xF0FF(int a)
+        private int func_0xF0FF(int isSend, string[] dt = null)
         {
-            if (a == 0)
+            if (isSend == 0)
             {
                 //Success received ACK
                 Console.ForegroundColor = ConsoleColor.Green;
@@ -1280,37 +1278,37 @@ namespace TaiSEIA
             return 0;
         }
 
-        private int func_0xF100(int a) 
+        private int func_0xF100(int isSend, string[] dt = null) 
         {
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("The function just sent by HG succeeded executing or was agreed by HNA!");            
             return 0;
         }
-        private int func_0xF101(int a)
+        private int func_0xF101(int isSend, string[] dt = null)
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine("HNA sent header ID error");
             return 0;
         }
-        private int func_0xF102(int a)
+        private int func_0xF102(int isSend, string[] dt = null)
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine("HNA sent packet length error");
             return 0;
         }
-        private int func_0xF103(int a)
+        private int func_0xF103(int isSend, string[] dt = null)
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine("HNA sent CRC-is-not-correct error");
             return 0;
         }
-        private int func_0xF110(int a)
+        private int func_0xF110(int isSend, string[] dt = null)
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine("HNA doesn't support this function ID!!");
             return 0;
         }
-        private int func_0xF131(int a)
+        private int func_0xF131(int isSend, string[] dt = null)
         {
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("HNA is going to execute command..");
@@ -1408,10 +1406,18 @@ namespace TaiSEIA
                 Console.WriteLine("Smart Appliance Class construction failed!!");
             }                       
         }
-        virtual public void ActionCode(byte[] cmd)
+        virtual public void ActionCode(string[] a)
         {
             //Leave to each SA class to complete the definition
-        }            
+        }
+        public byte[] int2DataArray(int value)
+        {
+            byte[] tmp = BitConverter.GetBytes(Convert.ToInt16(value));
+            if (BitConverter.IsLittleEndian)
+                Array.Reverse(tmp);
+            return tmp;
+        }
+                 
     }
 
     public class Electric_Fan : Smart_Appliance
@@ -1420,20 +1426,30 @@ namespace TaiSEIA
         {
 
         }
-        override public void ActionCode(byte[] cmd)
+        override public void ActionCode(string[] cmd)
         {
+            //
+            //cmd[0] : integer Read or Write (1 bit)
+            //cmd[1] : service ID, transform it to 1 byte code
+            //cmd[2] : data value, transform it to 2 bytes code
             //Define SA service actions here
+            int rw = Convert.ToInt32(cmd[0]);
+            int fcn = Convert.ToInt32(cmd[0], 16);
+            //System.Int16 = -32,768 to 32,767
+            int value = Convert.ToInt16(cmd[2]);
 
-            if (cmd[0] == 0)//Turn off
+            //Prevent some mistake inputs
+            if (rw >= 2 || rw < 0)
             {
-                byte[] dt = new byte[] { 00, 00 };
-                msg_code.setService_ID(0x80, dt);
-            }
-            if (cmd[0] == 1)//Turn on
-            {
-                byte[] dt = new byte[] { 00, 01 };
-                msg_code.setService_ID(0x80, dt);
-            }
+                throw new System.ArgumentException("Parameter is out of range", "rw");
+            }           
+
+            //Still need some judgement here!
+
+            //
+                        
+            int tmp_id = 8 * rw + fcn;
+            msg_code.setService_ID(tmp_id, int2DataArray(value));
 
         }
     }
