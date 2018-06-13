@@ -319,7 +319,7 @@ namespace TaiSEIA
                     data[0] = Convert.ToByte(tmp);
                 }
             }
-            else if (this.isEqualFunctionID(0x0400))
+            else if (this.isEqualFunctionID(0x0400)|| this.isEqualFunctionID(0x0005))
             {
                 if (cmd_data == null)
                     throw new System.ArgumentException("Data is null!! Requires DATA!!!", "cmd_data");
@@ -808,13 +808,16 @@ namespace TaiSEIA
             Console.ResetColor();
 
             //Add function table             
+            func_table.Add(0x0005, func_0x0005);
             func_table.Add(0x0100, func_0x0100);
             func_table.Add(0x0201, func_0x0201);
             func_table.Add(0x0301, func_0x0301);
             func_table.Add(0x0303, func_0x0303);
             func_table.Add(0x0400, func_0x0400);
-            func_table.Add(0xF100, func_0xF100);
             func_table.Add(0xF0FF, func_0xF0FF);
+            func_table.Add(0xF100, func_0xF100);
+            func_table.Add(0xF110, func_0xF110);
+            func_table.Add(0xF131, func_0xF131);
         }
         
         public void setUserID(string a) { USER_ID = a; }
@@ -892,10 +895,18 @@ namespace TaiSEIA
             t.Start();
         }
 
-        public void sendCMD2SA(int tt)
+        public void sendCMD2SA(int fcn)
         {
             isInAction = true;
-            func_table[0x0400](1);
+            try {
+                func_table[fcn](1);
+            }
+            catch (Exception e)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Error during sending cmd: " + e.ToString());
+            }
+            
             isInAction = false;
         }
 
@@ -1002,14 +1013,17 @@ namespace TaiSEIA
             {
                 if (waitForCode(0xF0FF) == -1)
                 {
+                    Console.ForegroundColor = ConsoleColor.Red;
                     Console.WriteLine("Timeout : HNA has no response, resending message in 3 seconds...");
                     Task.Delay(3000);
+                    Console.ForegroundColor = ConsoleColor.Red;
                     Console.WriteLine("Resending message to HNA...");
                     sendFCNCode(evt_id, fcn_id, isIDrequired, dt);
                 }
                 else
                 {
                     //Success received ACK
+                    Console.ForegroundColor = ConsoleColor.Green;
                     Console.WriteLine("ACK received from HNA.");
                 }
             }                
@@ -1032,36 +1046,40 @@ namespace TaiSEIA
             Task.Delay(20);//MUST ADD!! Wait for rcv_cmd to store data...
             if (rcv_cmd == null)
             {
+                Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("ERROR : rcv_cmd[0] is a null pointer!!");                
                 return -1;
             }
             if (wait_time > wait_time_max)
             {
+                Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("ERROR : Wait time is larger than wait_time_max {0}", wait_time_max);                
                 return -1;
             }
 
             TaiSEIA_G2N_Packet rcv_code = new TaiSEIA_G2N_Packet(rcv_cmd[0]);
-            if (rcv_code.isEqualFunctionID(fcn_code))
+            if (rcv_code.isEqualFunctionID(fcn_code)|| rcv_code.function_ID[0] == 0xF1)
             {
                 //Respond to message here
+                int cmd = TaiSEIA_G2N_Packet.byte2int(rcv_code.function_ID);
                 try
-                {
-                    func_table[fcn_code](0);
+                {                    
+                    func_table[cmd](0); //The function MUST APPLIES " rcv_cmd.RemoveAt(0); "                    
                 }
-                catch(Exception e)
+                catch (Exception e)
                 {
+                    rcv_cmd.RemoveAt(0);
                     Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("\nERROR : "+e.ToString()+"\n");
+                    Console.WriteLine("\nERROR : " + e.ToString() + "\n");
                     Console.ResetColor();
-                }                
-            }            
+                }
+            }
             else
-            {                
+            {
                 rcv_cmd.RemoveAt(0);//remove first index after processed the msg
                 status = -1;//Failed to wait for desired function ID       
                 string tmp = String.Format("\nERROR : Function CODE is no expected!! Desired {0} , Received {1}{2}",
-                                  fcn_code, rcv_code.function_ID[0].ToString("X2"), rcv_code.function_ID[1].ToString("X2"));
+                                  fcn_code.ToString("X4"), rcv_code.function_ID[0].ToString("X2"), rcv_code.function_ID[1].ToString("X2"));
                 throw new System.ArgumentException(tmp);
             }
             
@@ -1072,6 +1090,7 @@ namespace TaiSEIA
         {
             try
             {
+                Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("\nEVENT 1 : Setup ID process starting....");
                 current_event = 1;
                 //Send ACK
@@ -1096,7 +1115,8 @@ namespace TaiSEIA
                 eventThread.Abort();
             }
 
-            Console.WriteLine("\nEVENT 1 : Succeed and terminated...");
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("\nEVENT 1 : Succeed and terminated...\n");
             Console.ResetColor();
             Console.Write("TaiSEIA Server>");
             rcv_cmd.Clear();
@@ -1107,6 +1127,7 @@ namespace TaiSEIA
         private void eventThread_SecureRegist_Process() //Event 2&3 set scurity and start registration
         {
             try {
+                Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("\nEVENT 2 : Security confirmation process starting....");
                 current_event = 2;
 
@@ -1118,6 +1139,7 @@ namespace TaiSEIA
                 //Wait for HNA's Receive Set Success & send ACK!!
                 waitForCode(0xF100);
 
+                Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("\nEVENT 2 : Succeed and continue to event 3");
                 Console.WriteLine("\nEVENT 3 : Registration process starting....");
                 current_event = 3;
@@ -1145,8 +1167,8 @@ namespace TaiSEIA
                 eventThread.Abort();
             }
 
-
-            Console.WriteLine("\nEVENT 3 : Succeed and terminated...");
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("\nEVENT 3 : Succeed and terminated...\n");
             Console.ResetColor();
             Console.Write("TaiSEIA Server>");
 
@@ -1159,6 +1181,17 @@ namespace TaiSEIA
         /// </summary>
         /// <param name="a"></param>
         /// <returns></returns>
+
+        private int func_0x0005(int a)  //Reset function
+        {
+            if (a == 1)//Send
+            {                
+                current_event = 5;
+                sendFCNCode(current_event, 0x0005, true, new string[] {"FF FF FF FF"});
+                waitForCode(0xF131);
+            }
+            return 0;
+        }
         private int func_0x0100(int a)
         {
             eventThread = new Thread(new ThreadStart(eventThread_SetIDProcess));
@@ -1226,7 +1259,17 @@ namespace TaiSEIA
         private int func_0x0303(int a)
         {
             //Store SA DATA CODE HERE...
-            paired_SA = new Smart_Appliance(rcv_code.data);            
+
+            if (rcv_code.data[7] == 1)
+            {                
+                paired_SA = new Electric_Fan(rcv_code.data);
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("SA Electric Fan paired!!");
+            }
+            else {
+                paired_SA = new Smart_Appliance(rcv_code.data);
+            }
+            
             //*************************
             sendFCNCode(current_event, 0xF0FF);//Send ACK
             rcv_cmd.RemoveAt(0);//remove first index after processed the msg
@@ -1238,8 +1281,8 @@ namespace TaiSEIA
 
             // Test CODE
             if (a == 1)
-            {
-                paired_SA.msg_code.setService_ID(0x80, new byte[] { 0x00, 0x00 });
+            {                
+                paired_SA.ActionCode(new byte[] { 0 });
                 current_event = 5;
                 sendFCNCode(current_event, 0x400, true, new string[] { paired_SA.msg_code.ToString() });                
                 waitForCode(0x0400);
@@ -1253,20 +1296,37 @@ namespace TaiSEIA
 
             return 0;
         }
-
-
-        private int func_0xF100(int a)
+        private int func_0xF0FF(int a)
         {
+            rcv_cmd.RemoveAt(0);//remove first index after processed the msg            
+            return 0;
+        }
+
+        private int func_0xF100(int a) 
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("HNA succeeded and agreed!");
             sendFCNCode(current_event, 0xF0FF);//Send ACK
             rcv_cmd.RemoveAt(0);//remove first index after processed the msg
             return 0;
         }
-        private int func_0xF0FF(int a)
+        private int func_0xF110(int a)
         {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("HNA doesn't support this function!!");
+            sendFCNCode(current_event, 0xF0FF);//Send ACK
             rcv_cmd.RemoveAt(0);//remove first index after processed the msg
-            //Console.WriteLine("\nSEGMENT======\n");
             return 0;
         }
+        private int func_0xF131(int a)
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("HNA is going to execute command..");
+            sendFCNCode(current_event, 0xF0FF);//Send ACK
+            rcv_cmd.RemoveAt(0);//remove first index after processed the msg
+            return 0;
+        }
+
         //-----------
     }
 
@@ -1372,6 +1432,19 @@ namespace TaiSEIA
         }
         override public void ActionCode(byte[] cmd)
         {
+            //Define SA service actions here
+
+            if (cmd[0] == 0)//Turn off
+            {
+                byte[] dt = new byte[] { 00, 00 };
+                msg_code.setService_ID(0x80, dt);
+            }
+            if (cmd[0] == 1)//Turn on
+            {
+                byte[] dt = new byte[] { 00, 01 };
+                msg_code.setService_ID(0x80, dt);
+            }
+
         }
     }
 }

@@ -54,7 +54,11 @@ namespace Server_Console
                     break;                                  
                 else if(cmd.Equals("O") || cmd.Equals("o"))
                 {
-                    server.clients[0].sendCMD2SA(0);
+                    server.clients[0].sendCMD2SA(0x0400);
+                }
+                else if (cmd.Equals("R") || cmd.Equals("r"))
+                {
+                    server.clients[0].sendCMD2SA(0x0005);
                 }
                 else
                 {
