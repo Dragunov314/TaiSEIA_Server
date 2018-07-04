@@ -18,7 +18,7 @@ namespace TaiSEIA
         public List<HNAClients> clients; // Creates a TCP Client list
 
         private TcpListener server;
-
+        public int HNA_id_count = 0;
 
         public TaiSEIA_Server(string port, string usr = "8787", string hg = "1")
         {
@@ -42,6 +42,7 @@ namespace TaiSEIA
                 {
                     HNAClients tmp = new HNAClients(server.AcceptTcpClient());
 
+                    tmp.setHNAID(Convert.ToString(HNA_id_count++));
                     clients.Add(tmp);  //Waits for the Client To Connect
                     
                     if (clients[clients.Count - 1].cln_socket.Connected) // If you are connected
@@ -55,11 +56,30 @@ namespace TaiSEIA
             t.Start();
         }
 
+        public void clearDisconnected()
+        {            
+            for (int i = clients.Count-1; i >=0 ; i--)
+            {
+                if (clients[i].cln_socket.Connected == false)
+                {
+                    clients.RemoveAt(i);
+                }
+            }
+        }
 
-
-
-
-
+        public void printStatus()
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("\n================ Connected SA ==================");
+            for (int i = clients.Count - 1; i >= 0; i--)
+            {
+                if (clients[i].cln_socket.Connected == true)
+                {
+                    Console.WriteLine("HNA Client ID "+ String.Format("{0:-3}",clients[i].getHNAID()));
+                }
+            }
+            Console.WriteLine("=================================================\n");
+        }
 
         //Send message to specific client or all clients
         public void ServerSend(string msg, int target = -1)
@@ -366,6 +386,16 @@ namespace TaiSEIA
             if (evt_id > 0xFFFF || evt_id < 0x0000)
                 throw new System.ArgumentException("Parameter is out of range", "evt_id");
             event_ID = int2byteArray(evt_id, 16);
+        }
+        public void setData(byte[] a)
+        {
+            data = new byte[a.Length];
+            for (int i = 0; i < a.Length; i++)
+            {
+                data[i] = a[i];
+            }
+            Array.Copy(a, 0, data, 0, a.Length);
+            refreshAllMembers();
         }
         public TaiSEIA_G2N_Packet(string hexstr)
         {
@@ -689,6 +719,11 @@ namespace TaiSEIA
                 throw new System.ArgumentException("Parameter is out of range", "a");
             service_ID = Convert.ToByte(a);
 
+            if (dt.Length != 2)
+            {
+                throw new System.ArgumentException("Data size is not matched!!", "dt");
+            }
+
             if (dt != null)
             {
                 data = new byte[dt.Length];
@@ -759,8 +794,6 @@ namespace TaiSEIA
 
     public class HNAClients
     {
-        private static Mutex mut = new Mutex();
-
         public int current_event = 1;
 
         public TcpClient cln_socket;
@@ -1231,25 +1264,42 @@ namespace TaiSEIA
         private int func_0x0303(int isSend, string[] dt = null)
         {
             //Store SA DATA CODE HERE...
-
-            if (rcv_code.data[7] == 1)
-            {                
+            if (rcv_code.data.Length < 7)
+            {
+                //If SA throws dummy data 06 01 00 00 01 06
+                byte[] tmp = { 0x46, 0x00, 0x00, 0x04, 0x00, 0x03, 0x00, 0x01, 0x48,
+                    0x49, 0x54, 0x41, 0x43, 0x48, 0x49, 0x00, 0x52, 0x41, 0x53, 0x32,
+                    0x38, 0x4E, 0x42, 0x00, 0x80, 0x00, 0x03, 0x81, 0x00, 0x1F, 0x82,
+                    0x00, 0x1F, 0x83, 0x10, 0x20, 0x04, 0x00, 0x28, 0x85, 0x00, 0x03,
+                    0x86, 0x00, 0x90, 0x8B, 0x05, 0x90, 0x8C, 0x05, 0x90, 0x8E, 0x00,
+                    0x03, 0x90, 0x00, 0x03, 0x91, 0x00, 0x3E, 0x15, 0x00, 0x55, 0x9D,
+                    0x00, 0x3F, 0x9E, 0x00, 0x03, 0x16 };
+                rcv_code.setData(tmp);
                 paired_SA = new Electric_Fan(rcv_code.data);
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("SA Electric Fan paired!!");
             }
             else {
-                paired_SA = new Smart_Appliance(rcv_code.data);
+                if (rcv_code.data[7] == 0x0F)
+                {
+                    paired_SA = new Electric_Fan(rcv_code.data);
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("SA Electric Fan paired!!");
+                }
+                else
+                {
+                    paired_SA = new Smart_Appliance(rcv_code.data);
+                    Console.WriteLine("Unknowned SA paired!!");
+                }
             }
+            
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("HNA informed SA's supporting functions!");
             return 0;
         }
 
         private int func_0x0400(int isSend, string[] dt=null)//1: Send, 0: Receive
-        {
-
-            // Test CODE
+        {            
             if (isSend == 1)
             {
                 //new string[] { "1", "0x00", "1" }
@@ -1261,6 +1311,7 @@ namespace TaiSEIA
             if (isSend == 0)
             {
                 Console.ForegroundColor = ConsoleColor.Green;
+                paired_SA.recieveCode(rcv_code.data);
                 Console.WriteLine("HNA sent monitored-device responding packet");
             }
             
@@ -1326,10 +1377,11 @@ namespace TaiSEIA
     {
         public TaiSEIA_N2S_Packet msg_code;
         public byte SA_ID;
-        public List<byte[]> support_function = new List<byte[]>();
+        public List<byte[]> support_functions_byte = new List<byte[]>();
+        public List<SA_Support_Function> support_functions = new List<SA_Support_Function>();
         public string Brand;
         public string Model;
-        public int data_type; //0:一般資料型態, 1:多位元組資料型態
+        public int data_format; //0:一般資料型態, 1:多位元組資料型態
         public int[] TaiSEIA_Device_Monitor_Version = new int[2];
         public int Baud_Rate;
         public int Device_Type;//0:Home appliance, 1:Power generator, 2:Energy storing, 3:Sensor
@@ -1350,7 +1402,7 @@ namespace TaiSEIA
                 //Console.WriteLine("Registration Responding Packet check code is correct!!");
 
                 byte tmp = regist_msg[2];
-                data_type = (tmp & Convert.ToInt32("1000000", 2)) >> 7;// bit 7 is data type, bit 4-6 is reserved
+                data_format = (tmp & Convert.ToInt32("1000000", 2)) >> 7;// bit 7 is data type, bit 4-6 is reserved
                 Device_Type = tmp & Convert.ToInt32("00001111", 2);   // bit 0-3 is device type
 
                 TaiSEIA_Device_Monitor_Version[0] = regist_msg[3]; //Main verseion
@@ -1394,7 +1446,7 @@ namespace TaiSEIA
                 {
                     byte[] tmp3 = new byte[3];
                     Array.Copy(regist_msg, i, tmp3, 0, tmp3.Length);
-                    support_function.Add(tmp3);
+                    support_functions_byte.Add(tmp3);
                 }
 
                 msg_code = new TaiSEIA_N2S_Packet();
@@ -1406,10 +1458,95 @@ namespace TaiSEIA
                 Console.WriteLine("Smart Appliance Class construction failed!!");
             }                       
         }
-        virtual public void ActionCode(string[] a)
+        public void ActionCode(string[] cmd)
         {
-            //Leave to each SA class to complete the definition
+            //
+            //cmd[0] : integer Read or Write (1 bit) 0: read , 1: write
+            //cmd[1] : service ID, transform it to 1 byte code
+            //cmd[2] : data value, transform it to 2 bytes code
+            //Define SA service actions here
+            int rw = Convert.ToInt32(cmd[0]);
+            int fcn = Convert.ToInt32(cmd[1], 16);
+            //System.Int16 = -32,768 to 32,767
+            int value = Convert.ToInt16(cmd[2]);
+
+            //Prevent some mistake inputs
+            if (rw >= 2 || rw < 0)
+            {
+                throw new System.ArgumentException("Parameter is out of range", "rw");
+            }
+
+            //Still need some judgement here!
+
+            //
+
+            int tmp_id = (rw << 7) + fcn;
+            if(isFunctionValid(rw,fcn,value)==false)
+            {
+                throw new System.ArgumentException("SA doesn't support this function!!", "fcn");
+            }
+            if (rw == 0)
+                msg_code.setService_ID(tmp_id, new byte[2]{0xFF,0xFF});
+            else
+                msg_code.setService_ID(tmp_id, int2DataArray(value));
         }
+
+        virtual public void printSupportList()
+        {
+            //Leave for each SA class to complete definition
+        }
+
+        public bool isFunctionValid(int rw, int fcn, int value)
+        {
+            int index = -1;
+            for (int i = 0; i < support_functions.Count; i++)
+            {
+                if (support_functions[i].function_ID == fcn)
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index == -1)
+                return false;
+
+            if (support_functions[index].WRITE == false && rw == 1)
+                return false;
+
+            if (rw == 0)
+                return true;
+
+            if (support_functions[index].data_type.Equals("ENUM16"))
+            {
+                int index2 = -1;
+                for (int i = 0; i < support_functions[index].data_support.Count; i++)
+                {
+                    if (support_functions[index].data_support[i] == value)
+                    {
+                        index2 = i;
+                        break; 
+                    }
+                }
+
+                if (index2 == -1)
+                    return false;
+            }
+            if (support_functions[index].data_type.Equals("INT8"))
+            {
+                if (value < support_functions[index].data_support[0] ||
+                   value > support_functions[index].data_support[1])
+                    return false;
+            }
+
+            return true;
+        }
+
+        virtual public void recieveCode(byte[] code)
+        {
+
+        }
+
         public byte[] int2DataArray(int value)
         {
             byte[] tmp = BitConverter.GetBytes(Convert.ToInt16(value));
@@ -1424,33 +1561,180 @@ namespace TaiSEIA
     {
         public Electric_Fan(byte[] reg):base(reg)
         {
+            //Construct support function list here
+            for (int i = 0; i < support_functions_byte.Count; i++)
+            {
+                //Extract function ID
+                int tmp = support_functions_byte[i][0];
+                if (tmp >= (1 << 7))
+                    tmp = tmp - (1<<7);
+
+                //define support functions here
+                switch (tmp)
+                {
+                    case 0x00:
+                    case 0x01:
+                    case 0x02:
+                    case 0x05:
+                    case 0x06:
+                    case 0x07:
+                        support_functions.Add(new SA_Support_Function(support_functions_byte[i], "ENUM16"));
+                        break;
+                    case 0x03:
+                        support_functions.Add(new SA_Support_Function(support_functions_byte[i], "INT8"));
+                        break;
+                    default:
+                        break;
+                }
+
+            }
 
         }
-        override public void ActionCode(string[] cmd)
+
+        public override void printSupportList()
         {
-            //
-            //cmd[0] : integer Read or Write (1 bit)
-            //cmd[1] : service ID, transform it to 1 byte code
-            //cmd[2] : data value, transform it to 2 bytes code
-            //Define SA service actions here
-            int rw = Convert.ToInt32(cmd[0]);
-            int fcn = Convert.ToInt32(cmd[0], 16);
-            //System.Int16 = -32,768 to 32,767
-            int value = Convert.ToInt16(cmd[2]);
-
-            //Prevent some mistake inputs
-            if (rw >= 2 || rw < 0)
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("\n===========SA Information=====================");
+            Console.WriteLine("SA ID : " + SA_ID.ToString() +" FAN");
+            Console.WriteLine("Brand : " + Brand);
+            Console.WriteLine("Model : " + Model);
+            Console.WriteLine("Baud Rate : " + Baud_Rate.ToString());
+            Console.WriteLine("Device ID : " + SA_ID.ToString("X2"));
+            for (int i = 0; i < support_functions.Count; i++)
             {
-                throw new System.ArgumentException("Parameter is out of range", "rw");
-            }           
+                Console.WriteLine(support_functions[i].ToString());
+            }
+            Console.WriteLine("==============================================\n");
+        }
 
-            //Still need some judgement here!
+        public override void recieveCode(byte[] code)
+        {
+            base.recieveCode(code);
+            //Extract function ID
+            int tmp = code[2];
+            if (tmp >= (1 << 7))
+                tmp = tmp - (1 << 7);
 
-            //
-                        
-            int tmp_id = 8 * rw + fcn;
-            msg_code.setService_ID(tmp_id, int2DataArray(value));
+            byte[] dataBytes = new byte[2];
+            Array.Copy(code, 3, dataBytes, 0, 2);
+            int value = TaiSEIA_G2N_Packet.byte2int(dataBytes);
+            switch (tmp)
+            {
+                case 0x00:                    
+                    Console.WriteLine("Current power : " + (value==1 ? "ON":"OFF") );
+                    break;
+                case 0x01:
+                    Console.WriteLine("Current mode : " + value);
+                    break;
+                case 0x02:                    
+                    Console.WriteLine("Current speed : " + value);
+                    break;
+                case 0x03:                                        
+                    Console.WriteLine("Current Temperature : " + value + " ℃");
+                    break;
+                case 0x05:
+                    Console.WriteLine("Current fan swing : " + (value == 1 ? "ON" : "OFF"));
+                    break;
+                default:
+                    break;
+            }
 
         }
     }
+
+    public class SA_Support_Function
+    {
+        public int function_ID;
+        public bool READ;
+        public bool WRITE;
+        public string data_type;
+        public List<int> data_support = new List<int>();
+        /// <summary>
+        /// Inputs 3 bytes array to constructor
+        /// </summary>
+        /// <param name=""></param>
+        public SA_Support_Function(byte[] code,string dt_type)
+        {
+            if (code.Length != 3)
+            {
+                throw new System.ArgumentException("Array length is not matched!!", "code");
+            }
+
+            data_type = dt_type;
+
+            int tmp = code[0];
+            if ((tmp & (1 << 7)) == 0)
+            {
+                //Only read available
+                READ = true;
+                WRITE = false;
+            }
+            else
+            {
+                //RW available
+                tmp -= (1 << 7);
+                READ = true;
+                WRITE = true;
+            }
+
+            function_ID = tmp;
+
+            if (data_type.Equals("ENUM16"))
+            {                
+                byte[] dataBytes = new byte[2];
+                Array.Copy(code, 1, dataBytes, 0, 2);
+                tmp = TaiSEIA_G2N_Packet.byte2int(dataBytes);
+                
+                int jg = 1;
+                for (int i = 0; i < 16; i++)
+                {
+                    if ((tmp & jg) != 0)
+                    {
+                        data_support.Add(i);
+                    }
+                    jg = jg << 1;
+                }                               
+            }
+            if (data_type.Equals("INT8"))
+            {
+                //Max and minimum values are signed bytes
+                sbyte s = unchecked((sbyte)code[1]);
+                data_support.Add(Convert.ToInt32(s));//Min value
+                s = unchecked((sbyte)code[2]);
+                data_support.Add(s);//Max value
+            }
+            if (data_type.Equals("UINT8"))
+            {
+                //Max and minimum values are unsigned bytes                
+                data_support.Add(code[1]);//Min value                
+                data_support.Add(code[2]);//Max value
+            }
+
+        }
+
+        public void setDatatype(string a)
+        {
+            data_type = a;
+        }
+
+        public override string ToString()
+        {
+            string result="";
+            result += ("[0x" + function_ID.ToString("X2") + "] : ");
+
+            string tmp="";
+            if (READ == true) tmp += "R";
+            if (WRITE == true) tmp += "W";
+            result += String.Format("[{0, -2}]", tmp);
+            result += (" "+ String.Format("[{0, -10}]", data_type) +" Support modes: ");
+            for (int i = 0; i < data_support.Count-1; i++)
+            {
+                result += (String.Format("{0, -4}", data_support[i].ToString()) + ", ");
+            }
+            result += (String.Format("{0, -4}", data_support[data_support.Count - 1].ToString()) + "");
+
+            return result;
+        }
+    }
+
 }
